@@ -1,0 +1,40 @@
+--- DATA ---
+
+|s| = N x K  -->  support set dimension
+|q| = N x Q  -->  query set dimension
+
+s, q share the same class space
+
+G(train) = {(G(train, i), y(train, i))}  -->  train set
+d = |G(train)|  -->  dimension of the train set
+c = |unique(y(train, i), i=1...d)|  -->  number of unique classes of train set
+
+c > N
+
+--- SUPPORT AND QUERY SET SAMPLER ---
+
+function iter_sample_NKshot_with_Query(
+	Data:
+		- G(train)  --> train set
+		- d --> dimension of the train set
+		- c --> number of classes of the train set
+		- N --> Number of classes to select
+		- K --> Number of support sample per class
+		- Q --> Number of query sample per class
+){
+	target_classes = random.sample(from=unique(y(train, i), i=1...d), size=N)
+	
+	foreach (cl <- target_classes) do 
+	{
+		filtered_data = filter(data=G(train),by=Lambda(x, x.y == cl))
+		f = |filtered_data|
+
+		IMPORTANT: assert(f >= K + Q)
+
+		selected_data = random.sample(from=filtered_data, size=(K + Q))	
+		support_data = selected_data.slice(start=0, end=K)
+		query_data = selected_data.slice(start=K, end=(K + Q))
+
+		generate(support_data, query_data)
+	}
+}
