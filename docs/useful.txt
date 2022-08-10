@@ -11,6 +11,41 @@ c = |unique(y(train, i), i=1...d)|  -->  number of unique classes of train set
 
 c > N
 
+epoch_size  -->  number of batches per epoch
+batch_size  -->  number of training episodes per batch
+
+--- COSTANTS ---
+
+POOLING_RATIO = 0.5
+DROPOUT_RATIO = 0.3
+
+OUTER_LR     = 0.001
+INNER_LR     = 0.01
+STOP_LR      = 0.0001
+WEIGHT_DECAY = 1E-05
+
+MAX_STEP      = 15
+MIN_STEP      = 5
+STEP_TEST     = 15
+FLEXIBLE_STEP = True
+STEP_PENALITY = 0.001
+USE_SCORE     = True
+USE_GRAD      = False
+USE_LOSS      = True
+
+TRAIN_SHOT         = 10   # K-shot for training set
+VAL_SHOT           = 10   # K-shot for validation (or test) set
+TRAIN_QUERY        = 15   # Number of query for the training set
+VAL_QUERY          = 15   # Number of query for the validation (or test) set
+TRAIN_WAY          = 3    # N-way for training set
+TEST_WAY           = 3    # N-way for test set
+VAL_EPISODE        = 200  # Number of episodes for validation
+TRAIN_EPISODE      = 200  # Number of episodes for training
+BATCH_PER_EPISODES = 5    # How many batch per episode
+EPOCHS             = 500  # How many epochs
+PATIENCE           = 35
+GRAD_CLIP          = 5
+
 --- SUPPORT AND QUERY SET SAMPLER ---
 
 function iter_sample_NKshot_with_Query(
@@ -21,20 +56,80 @@ function iter_sample_NKshot_with_Query(
 		- N --> Number of classes to select
 		- K --> Number of support sample per class
 		- Q --> Number of query sample per class
+		- epoch_size --> number of batches per epoch
 ){
 	target_classes = random.sample(from=unique(y(train, i), i=1...d), size=N)
-	
-	foreach (cl <- target_classes) do 
+
+	for (i=1...epoch_size) do
 	{
-		filtered_data = filter(data=G(train),by=Lambda(x, x.y == cl))
-		f = |filtered_data|
+		n_way_k_shot_n_query = List()
 
-		IMPORTANT: assert(f >= K + Q)
+		foreach (cl <- target_classes) do 
+		{
+			filtered_data = filter(data=G(train),by=Lambda(x, x.y == cl))
+			f = |filtered_data|
 
-		selected_data = random.sample(from=filtered_data, size=(K + Q))	
-		support_data = selected_data.slice(start=0, end=K)
-		query_data = selected_data.slice(start=K, end=(K + Q))
+			IMPORTANT: assert(f >= K + Q)
+
+			selected_data = random.sample(from=filtered_data, size=(K + Q))
+			n_way_k_shot_n_query.add(selected_data)
+		}
 
 		generate(support_data, query_data)
 	}
+}
+
+--- TASK BATCH SAMPLER ---
+
+function iter_task_batch_sampler(
+	Data:
+		- functions.iter_sample_NKshot_with_Query.PARAMETERS
+		- batch_size --> number of batches
+){
+	few_shot_sampler = iter_sample_NKshot_with_Query(
+		G(train), d, c, N, K, Q, epoch_size
+	)
+
+	mini_batches = List()
+	foreach (counter, task in few_shot_sampler.iterate())
+	{
+		mini_batches.add(task)
+		if (counter + 1) MOD batch_size == 0 {
+			generate(mini_batches)
+			mini_batches.clear()
+		}
+	}
+}
+
+--- CREATE BATCHES FROM DATA_BATCH ---
+
+function create_batches_from_data_batch(
+	Data:
+		- data_batch --> batch of data
+		- N --> Number of classes to select
+		- K --> Number of support sample per class
+		- Q --> Number of query sample per class
+		- batch_size --> number of batches
+	Return:
+		- support_data_batch
+		- query_data_batch
+){
+	support_data_batch = List()
+	query_data_batch = List()
+
+	for (i=1...batch_size) do
+	{
+		for (j=1...N) do
+		{
+			data_batch_per_batch = data_batch[i * N * (K + Q) : (i + 1) * N * (K + Q)]
+			support_query_data = data_batch_per_batch[j * (K + Q) : (j + 1) * (K + Q)]
+			support_data = support_query_data[0:K]
+			query_data = support_query_data[K:K+Q]
+			
+			support_data_batch.add(support_data)
+			query_data_batch.add(query_data)
+		}
+	}
+
+	Return support_data_batch, query_data_batch
 }
