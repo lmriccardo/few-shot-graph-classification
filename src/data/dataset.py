@@ -18,6 +18,7 @@ class GraphDataset(gdata.Dataset):
     @staticmethod
     def download_data_from_url() -> None:
         """ Download the dataset from the Internet """
+        print("--- Downloading The dataset from the Internet as a ZIP archive ---")
         response = requests.get(config.TRIANGLES_DATA_URL)
 
         # Save the content as a zip file
@@ -25,6 +26,7 @@ class GraphDataset(gdata.Dataset):
             iofile.write(response.content)
 
         # Extract the file
+        print("--- Extracting files from the archive ---")
         with zipfile.ZipFile(f"{config.ROOT_PATH}/TRIANGLES.zip", mode="r") as zip_ref:
             zip_ref.extractall(config.ROOT_PATH)
 
@@ -96,6 +98,7 @@ class GraphDataset(gdata.Dataset):
                             graphs: Dict[str, Tuple[nx.Graph, str]]
                             ) -> 'GraphDataset':
         """ Return a new Dataset containing only graphs with specific labels """
+        print("--- Creating the Dataset ---")
         filter = classes[(mask[:, None] == classes[None, :]).any(dim=0)].numpy()\
             .astype(str)\
             .tolist()
@@ -119,9 +122,10 @@ def generate_train_val_test(perc_test: float,
                             download_data: bool=True,
 ) -> Tuple[GraphDataset, GraphDataset, GraphDataset]:
     """ Return dataset for training, validation and testing """
+    print("--- Generating Train, Test and validation datasets --- ")
     if download_data:
         graphs = GraphDataset.download_data_from_url()
-        
+
     classes = get_all_labels(graphs)
     n_class = len(classes)
     perm = torch.randperm(n_class) + 1

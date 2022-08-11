@@ -1,9 +1,0 @@
-{
-    // ...
-
-    "settings": {
-        // ...
-        "python_virtualenv": "./venv/",
-        "python_interpreter": "./venv/bin/python",
-    }
-}
