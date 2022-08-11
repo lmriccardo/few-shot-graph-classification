@@ -1,6 +1,9 @@
 import os
 from typing import TypeVar
 
+
+TRIANGLES_DATA_URL = "https://cloud-storage.eu-central-1.linodeobjects.com/TRIANGLES.zip"
+
 ROOT_PATH = os.getcwd()
 GRAPH_ATTRIBUTE  = os.path.join(ROOT_PATH, "TRIANGLES/TRIANGLES_graph_attributes.txt")
 GRAPH_LABELS     = os.path.join(ROOT_PATH, "TRIANGLES/TRIANGLES_graph_labels.txt")
