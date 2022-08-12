@@ -2,9 +2,10 @@ import os
 from typing import TypeVar
 
 
+ROOT_PATH = os.getcwd()
+
 TRIANGLES_DATA_URL = "https://cloud-storage.eu-central-1.linodeobjects.com/TRIANGLES.zip"
 
-ROOT_PATH = os.getcwd()
 GRAPH_ATTRIBUTE  = os.path.join(ROOT_PATH, "TRIANGLES/TRIANGLES_graph_attributes.txt")
 GRAPH_LABELS     = os.path.join(ROOT_PATH, "TRIANGLES/TRIANGLES_graph_labels.txt")
 NODE_NATTRIBUTE  = os.path.join(ROOT_PATH, "TRIANGLES/TRIANGLES_node_attributes.txt")
@@ -14,6 +15,7 @@ GRAPH_A          = os.path.join(ROOT_PATH, "TRIANGLES/TRIANGLES_A.txt")
 T = TypeVar('T')
 
 LOAD_DATASET = True
+SAVE_PICLKE  = True
 
 POOLING_RATIO = 0.5
 DROPOUT_RATIO = 0.3
@@ -46,3 +48,7 @@ BATCH_PER_EPISODES = 5    # How many batch per episode
 EPOCHS             = 500  # How many epochs
 PATIENCE           = 35
 GRAD_CLIP          = 5
+
+# Stop Control configurations
+STOP_CONTROL_INPUT_SIZE = 2
+STOP_CONTROL_HIDDEN_SIZE = 20

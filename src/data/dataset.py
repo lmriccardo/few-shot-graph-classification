@@ -8,6 +8,7 @@ import networkx as nx
 from utils.utils import GeneratorTxt2Graph
 from typing import Dict, List, Tuple, Union, Optional
 import config
+import logging
 
 
 class GraphDataset(gdata.Dataset):
@@ -16,19 +17,21 @@ class GraphDataset(gdata.Dataset):
         self.graphs_ds = graphs_ds
 
     @staticmethod
-    def download_data_from_url() -> None:
+    def get_graphs(download: bool = True) -> None:
         """ Download the dataset from the Internet """
-        print("--- Downloading The dataset from the Internet as a ZIP archive ---")
-        response = requests.get(config.TRIANGLES_DATA_URL)
+        if download:
+            logging.debug("--- Downloading The dataset from the Internet as a ZIP archive ---")
+            
+            response = requests.get(config.TRIANGLES_DATA_URL)
 
-        # Save the content as a zip file
-        with open(f"{config.ROOT_PATH}/TRIANGLES.zip", mode="wb") as iofile:
-            iofile.write(response.content)
+            # Save the content as a zip file
+            with open(f"{config.ROOT_PATH}/TRIANGLES.zip", mode="wb") as iofile:
+                iofile.write(response.content)
 
-        # Extract the file
-        print("--- Extracting files from the archive ---")
-        with zipfile.ZipFile(f"{config.ROOT_PATH}/TRIANGLES.zip", mode="r") as zip_ref:
-            zip_ref.extractall(config.ROOT_PATH)
+            # Extract the file
+            logging.debug("--- Extracting files from the archive ---")
+            with zipfile.ZipFile(f"{config.ROOT_PATH}/TRIANGLES.zip", mode="r") as zip_ref:
+                zip_ref.extractall(config.ROOT_PATH)
 
         graph_attribute = open(config.GRAPH_ATTRIBUTE).readlines()
         graph_labels = open(config.GRAPH_LABELS).readlines()
@@ -98,7 +101,7 @@ class GraphDataset(gdata.Dataset):
                             graphs: Dict[str, Tuple[nx.Graph, str]]
                             ) -> 'GraphDataset':
         """ Return a new Dataset containing only graphs with specific labels """
-        print("--- Creating the Dataset ---")
+        logging.debug("--- Creating the Dataset ---")
         filter = classes[(mask[:, None] == classes[None, :]).any(dim=0)].numpy()\
             .astype(str)\
             .tolist()
@@ -118,13 +121,12 @@ def get_all_labels(graphs: Dict[str, Tuple[nx.Graph, str]]) -> torch.Tensor:
 
 def generate_train_val_test(perc_test: float,
                             perc_train: float,
-                            graphs: Optional[Dict[str, Tuple[nx.Graph, str]]]=None,
-                            download_data: bool=True,
+                            download_data: bool=True
 ) -> Tuple[GraphDataset, GraphDataset, GraphDataset]:
     """ Return dataset for training, validation and testing """
-    print("--- Generating Train, Test and validation datasets --- ")
-    if download_data:
-        graphs = GraphDataset.download_data_from_url()
+    logging.debug("--- Generating Train, Test and validation datasets --- ")
+
+    graphs = GraphDataset.get_graphs(download=download_data)
 
     classes = get_all_labels(graphs)
     n_class = len(classes)

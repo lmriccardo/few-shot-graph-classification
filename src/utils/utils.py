@@ -5,6 +5,10 @@ from typing import Dict, List, Tuple, Union
 import config
 import os
 import shutil
+import logging
+import torch
+import numpy as np
+import torch_geometric.data as gdata
 
 
 def plot_graph(G : Union[nx.Graph, nx.DiGraph], name: str) -> None:
@@ -92,13 +96,27 @@ def plot_graph(G : Union[nx.Graph, nx.DiGraph], name: str) -> None:
 
 def delete_data_folder() -> None:
     """Delete the folder containing data"""
-    print("--- Removing Content Data ---")
+    logging.debug("--- Removing Content Data ---")
 
     data_folder = os.path.join(config.ROOT_PATH, "TRIANGLES")
     shutil.rmtree(data_folder)
     os.remove(data_folder + ".zip")
     
-    print("--- Removed Finished Succesfully ---")
+    logging.debug("--- Removed Finished Succesfully ---")
+
+
+def setup_seed(seed=0):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    np.random.seed(seed)
+    torch.backends.cudnn.deterministic = True
+
+
+def get_batch_number(databatch, i_batch, n_way, k_shot):
+    """From a N batch takes the i-th batch"""
+    dim_databatch = n_way * k_shot
+    indices = torch.arange(0, config.BATCH_PER_EPISODES)
+    return gdata.Batch.from_data_list(databatch[indices * dim_databatch + i_batch])
 
 
 class GeneratorTxt2Graph:
@@ -123,7 +141,7 @@ class GeneratorTxt2Graph:
         a dictionary containing as keys the ID of the graph
         and as values a list of nodes belonging to that graph """
 
-        print("--- Collecting Nodes ---")
+        logging.debug("--- Collecting Nodes ---")
 
         nodes, i_nodes = dict(), dict()
         for i, graph_id in enumerate(self.__graph_indicator):
@@ -141,7 +159,7 @@ class GeneratorTxt2Graph:
         """ Look at the graph_A.txt file and return a dictionary
         containing as keys the ID of the graph and as values
         a list of edges of that graph """
-        print("--- Collecting Edges ...")
+        logging.debug("--- Collecting Edges ...")
 
         edges = dict()
         for line in self.__graph_adjacency:
@@ -154,7 +172,10 @@ class GeneratorTxt2Graph:
             graph_a, node_a = i_nodes[int(a)]
             graph_b, node_b = i_nodes[int(b)]
 
-            assert graph_a == graph_b, f"Two graphs are not equal: {graph_a} != {graph_b}"
+            if not graph_a == graph_b:
+                logging.error(f"Two graphs are not equal: {graph_a} != {graph_b}")
+                import sys
+                sys.exit(1)
 
             if graph_a not in edges:
                 edges[graph_a] = []
@@ -165,7 +186,7 @@ class GeneratorTxt2Graph:
     
     def _collect_node_attributes(self, i_nodes: Dict[str, Tuple[str, int]]) -> None:
         """ Set attributes for each nodes """
-        print("--- Collecting Node Attributes ...")
+        logging.debug("--- Collecting Node Attributes ...")
         for i, attr in enumerate(self.__node_attribute):
             node_i = i_nodes[i + 1]
             attrs = attr.split(", ")
@@ -174,7 +195,7 @@ class GeneratorTxt2Graph:
 
     def _collect_graph_labels(self, graphs: Dict[str, nx.Graph]) -> None:
         """ Set the attribute label for each graph """
-        print("--- Collecting Graph Labels ...")
+        logging.debug("--- Collecting Graph Labels ...")
         for i, label in enumerate(self.__graph_labels):
             graph_i = graphs[str(i + 1)]
             graphs[str(i + 1)] = (graph_i, label[:-1])
