@@ -1,12 +1,11 @@
 import torch
 import torch_geometric.data as gdata
 
-from typing import Optional
 import requests
 import zipfile
 import networkx as nx
 from utils.utils import GeneratorTxt2Graph
-from typing import Dict, List, Tuple, Union, Optional
+from typing import Dict, List, Tuple, Union
 import config
 import logging
 

@@ -156,3 +156,6 @@ class AdaptiveStepMAML(nn.Module):
                     weight.fast = weight.fast - self.inner_lr * grad[index]
                 
                 fast_parameters.append(weight.fast)
+            
+            logits_q, _, _ = self.net(...)  # TODO: Change accordingly to data structure
+            loss_q = self.compute_loss(logits_q, query_data.y)

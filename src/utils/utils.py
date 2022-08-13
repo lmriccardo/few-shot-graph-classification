@@ -9,6 +9,7 @@ import logging
 import torch
 import numpy as np
 import torch_geometric.data as gdata
+import random
 
 
 def plot_graph(G : Union[nx.Graph, nx.DiGraph], name: str) -> None:
@@ -105,7 +106,8 @@ def delete_data_folder() -> None:
     logging.debug("--- Removed Finished Succesfully ---")
 
 
-def setup_seed(seed=0):
+def setup_seed(seed=42):
+    random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     np.random.seed(seed)
