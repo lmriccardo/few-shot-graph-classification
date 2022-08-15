@@ -1,6 +1,5 @@
 import sys
 import os
-from types import new_class
 sys.path.append(os.getcwd())
 
 from data.dataset import generate_train_val_test
