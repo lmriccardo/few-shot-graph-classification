@@ -1,52 +1,18 @@
-"""
-For the source of this code check-out https://github.com/NingMa-AI/AS-MAML
+""" For the source of this code check-out https://github.com/NingMa-AI/AS-MAML/blob/master/models/meta_ada.py """
 
-Algorithm:
-
-function AS-MAML(
-    Input:
-        - Task distribution p(T) over {(G_train, y_train)}
-    
-    Paramters:
-        - Graph embedding parameters "e"
-        - Classifier parameters "c"
-        - Step control parametrs "s"
-        - Learning Rates a1, a2, a3
-    
-    Output:
-        - Trained parameters
-){
-    initialize_random(a1, a2, a3)
-    while (not converge) do
-    {
-        T_i = (D(train, sup), D(train, query)) <- random.sample(p(T))
-        T <- get_adaptation_step()
-        P' <- P = {e, c}  // Set fast adaptation parameters
-        for (t=0 ... T) do
-        {
-            P' <- P' - a1 * Grad(P', L(T_i, f_P'))
-            M_T <- compute_ANI()
-            p(t) <- compute_stop_probability()
-            Q(t) <- compute_reward(on=D(train, que))
-        }
-
-        P <- P - a2 * Grad(P', L(T_i, f_P'))
-        for (t=0 ... T) do
-        {
-            s <- s + a3 * Q(t) * Grad(s, ln(p(t)))
-        }
-    }
-}
-"""
-
+from typing import final
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torch.nn.functional as F
 
 import torch_geometric.data as gdata
 
+import numpy as np
+
 from utils.utils import get_batch_number
 import config
+import math
 
 
 class AdaptiveStepMAML(nn.Module):
@@ -91,57 +57,77 @@ class AdaptiveStepMAML(nn.Module):
     def compute_loss(self, logits: torch.Tensor, label: torch.Tensor) -> float:
         return self.loss(logits.squeeze(), label.double().squeeze())
 
+    @staticmethod
+    def smooth(weight, p=10, eps=1e-10):
+        weight_abs = weight.abs()
+        less = (weight_abs < math.exp(-p)).type(torch.float)
+        noless = 1.0 - less
+        log_weight = less * -1 + noless * torch.log(weight_abs + eps) / p
+        sign = less * math.exp(p) * weight + noless * weight.sign()
+        assert  torch.sum(torch.isnan(log_weight))==0,'stop_gate input has nan'
+        return log_weight, sign
+
     def stop(self, step: int, loss: float, node_score: torch.Tensor):
-        ...
+        stop_hx = None
+        if config.FLEXIBLE_STEP and +step < config.MAX_STEP:
+            inputs = []
+
+            if config.USE_LOSS:
+                inputs += [loss.detach()]
+            if config.USE_SCORE:
+                score = node_score.detach()
+                inputs += [score]
+
+            inputs = torch.stack(inputs, dim=0).unsqueeze(0)
+            inputs = self.smooth(inputs)[0]
+            stop_gate, stop_hx = self.stop_gate(inputs, stop_hx)
+
+            return stop_gate    
+
+        return loss.new_zeros(1, dtype=torch.float)
+
+    def adapt_meta_learning_rate(self, loss):
+        self.scheduler.step(loss)
+    
+    def get_meta_learning_rate(self):
+        epoch_learning_rate = []
+        for param_group in self.meta_optim.param_groups:
+            epoch_learning_rate.append(param_group['lr'])
+        return epoch_learning_rate[0]
 
     def forward(self, support_data: gdata.batch.Batch, query_data: gdata.batch.Batch):
-        task_num = support_data.y.shape[0] // config.BATCH_PER_EPISODES
+        # In the paper's code, they compute the so-called task_num. 
+        # However, it's value is always 1. For this reason, I decided to not use it
+
+        # It is just the number of labels to predict in the query set
         query_size = query_data.y.shape[0]
 
         losses_q = []  # Losses on query data
         corrects, stop_gates, train_losses, train_accs, scores = [], [], [], [], []
+        
+        fast_parameters = list(self.net.parameters())
 
-        for i in range(task_num):
-            i_batch = task_num + 1
+        for weight in self.net.parameters():
+            weight.fast = None
+        
+        step = 0
+        self.stop_prob = 0.1 if self.stop_prob < 0.1 else self.stop_prob
 
-            # Get the correct task batch from all the tasks batch
-            support_data_task = get_batch_number(
-                support_data, 
-                i_batch=i_batch, 
-                n_way=config.TRAIN_WAY,
-                k_shot=config.TRAIN_SHOT
-            )
+        # Get adaptation step
+        ada_step = min(config.MAX_STEP, config.MIN_STEP + int(1.0 / self.stop_prob))
 
-            query_data_task = get_batch_number(
-                query_data, 
-                i_batch=i_batch, 
-                n_way=config.TRAIN_WAY,
-                k_shot=config.TRAIN_QUERY
-            )
+        for k in range(0, ada_step):
+            # Run the i-th task and compute the loss
+            logits, score, _ = self.net(support_data.x, support_data.edge_index, support_data.batch)
 
-            fast_parameters = list(self.net.parameters())
-
-            for weight in self.net.parameters():
-                weight.fast = None
+            loss = self.compute_loss(logits, support_data.y)
+            stop_probability = 0
+            if config.FLEXIBLE_STEP:
+                stop_probability = self.stop(k, loss, score)
+                self.stop_prob = stop_probability
             
-            step = 0
-            self.stop_prob = 0.1 if self.stop_prob < 0.1 else self.stop_prob
-
-            # Get adaptation step
-            ada_step = min(config.MAX_STEP, config.MIN_STEP + int(1.0 / self.stop_prob))
-
-            for k in range(0, ada_step):
-                # Run the i-th task and compute the loss
-                logits, score, _ = self.net(...)  # TODO: Change accordingly to data structure
-
-                loss = self.compute_loss(logits, support_data_task.y)
-                stop_probability = 0
-                if config.FLEXIBLE_STEP:
-                    stop_probability = self.stop(k, loss, score)
-                    self.stop_prob = stop_probability
-                
-                stop_gates.append(stop_probability)
-                scores.append(score.item())
+            stop_gates.append(stop_probability)
+            scores.append(score.item())
 
             step = k
             train_losses.append(loss.item())
@@ -157,5 +143,109 @@ class AdaptiveStepMAML(nn.Module):
                 
                 fast_parameters.append(weight.fast)
             
-            logits_q, _, _ = self.net(...)  # TODO: Change accordingly to data structure
+            logits_q, _, _ = self.net(query_data.x, query_data.edge_index, query_data.batch)
             loss_q = self.compute_loss(logits_q, query_data.y)
+
+            losses_q.append(loss_q)
+
+            with torch.no_grad():
+                pred_q = F.softmax(logits_q, dim=1).argmax(dim=1)
+                correct = torch.eq(pred_q, query_data.y).sum().item()
+                corrects.append(correct)
+        
+        
+        final_loss = loss_q[step]
+        accs = np.array(corrects) / (query_size)
+        final_acc = accs[step]
+        total_loss = 0
+
+        if config.FLEXIBLE_STEP:
+            for step, (stop_gate, step_acc) in enumerate(zip(stop_gate[config.MIN_STEP - 1:], accs[config.MIN_STEP - 1:])):
+                assert stop_gate >= 0.0 and stop_gate <= 1.0, "stop_gate error value: {:.5f}".format(stop_gate)
+                log_prob = torch.log(1 - stop_gate)
+                tem_loss = - log_prob * ((final_acc - step_acc - (np.exp(step) - 1) * config.STEP_PENALITY))
+                total_loss += tem_loss
+
+            total_loss = (total_loss + final_acc + final_loss)
+        else:
+            total_loss = final_loss
+
+        total_loss.backward()
+
+        if self.task_index == config.BATCH_PER_EPISODES:
+            if config.GRAD_CLIP > 0.1:
+                torch.nn.utils.clip_grad_norm_(self.parameters(), config.GRAD_CLIP)
+
+            self.meta_optim.step()
+            self.meta_optim.zero_grad()
+            self.task_index = 1
+        else:
+            self.task_index += 1
+        
+        if config.FLEXIBLE_STEP:
+            stop_gates = [stop_gate.item() for stop_gate in stop_gates]
+
+        return accs * 100, step, final_loss.item(), total_loss.item(), stop_gates, scores, train_losses, train_accs
+
+    def finetuning(self, support_data, query_data):
+        query_size = query_data.y.shape[0]
+
+        corrects = []
+        step = 0
+        stop_gates, scores, query_loss = [], [], []
+
+        fast_parameters = list(self.net.parameters())
+
+        for weight in self.net.parameters():
+            weight.fast = None
+        
+        ada_step = min(self.update_step_test, self.min_step + int(2 / self.stop_prob))
+
+        for k in range(ada_step):
+            logits, score, _ = self.net(support_data.x, support_data.edge_index, support_data.batch)
+            loss = self.compute_loss(logits, support_data.y)
+            stop_probability = 0
+
+            if config.FLEXIBLE_STEP:
+                with torch.no_grad():
+                    stop_probability = self.stop(k, loss, score)
+            
+            stop_gates.apepnd(stop_probability)
+            step = k
+            scores.append(score.item())
+
+            grad = torch.autograd.grad(loss, fast_parameters, create_graph=True)
+            fast_parameters = []
+
+            for index, weight in enumerate(self.net.parameters()):
+                if weight.fast is None:
+                    weight.fast = weight - config.INNER_LR * grad[index]
+                else:
+                    weight.fast = weight.fast - config.INNER_LR * grad[index]
+
+                fast_parameters.append(weight.fast)
+
+            logits_q, _, graph_emb = self.net(query_data.x, query_data.edge_index, query_data.batch)
+            self.graph_labels.append(query_data.y)
+            self.graph_embs.append(graph_emb)
+
+            if self.index % 1 == 0:
+                self.index = 1
+                self.graph_embs = []
+                self.graph_labels = []
+            else:
+                self.index += 1
+            
+            with torch.no_grad():
+                pred_q = F.softmax(logits_q, dim=1).argmax(dim=1)
+                correct = torch.eq(pred_q, query_data.y).sum().item()
+                corrects.append(correct)
+                loss_query = self.compute_loss(logits_q, query_data.y)
+                query_loss.append(loss_query.item())
+
+        accs = 100 * np.array(corrects) / query_size
+
+        if config.FLEXIBLE_STEP:
+            stop_gates = [stop_gate.item() for stop_gate in stop_gates]
+
+        return accs, step, stop_gates, scores, query_loss

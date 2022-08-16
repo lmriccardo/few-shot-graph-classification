@@ -198,6 +198,7 @@ def main():
     print("Support Labels Size --- ", support_label.size())
 
     print("Support Nodes --- ", support_nodes)
+    print("Support Nodes Size --- ", support_nodes.size())
     print("Task Num --- ", support_nodes.size()[0])
 
     print("Query Labels --- ", query_label)

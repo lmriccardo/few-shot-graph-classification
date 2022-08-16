@@ -133,3 +133,47 @@ function create_batches_from_data_batch(
 
 	Return support_data_batch, query_data_batch
 }
+
+--- AS-MAML Algorithm ---
+
+Algorithm:
+	function AS-MAML(
+		Input:
+			- Task distribution p(T) over {(G_train, y_train)}
+		
+		Paramters:
+			- Graph embedding parameters "e"
+			- Classifier parameters "c"
+			- Step control parametrs "s"
+			- Learning Rates a1, a2, a3
+		
+		Output:
+			- Trained parameters
+	){
+		initialize_random(a1, a2, a3)
+		while (not converge) do
+		{
+			T_i = (D(train, sup), D(train, query)) <- random.sample(p(T))
+			T <- get_adaptation_step()
+			P' <- P = {e, c}  // Set fast adaptation parameters
+			for (t=0 ... T) do
+			{
+				P' <- P' - a1 * Grad(P', L(T_i, f_P'))
+				M_T <- compute_ANI()
+				p(t) <- compute_stop_probability()
+				Q(t) <- compute_reward(on=D(train, que))
+			}
+
+			P <- P - a2 * Grad(P', L(T_i, f_P'))
+			for (t=0 ... T) do
+			{
+				s <- s + a3 * Q(t) * Grad(s, ln(p(t)))
+			}
+		}
+	}
+
+--- MAPPINGS PAPER TO MY CODE ---
+
+support_labels  -->  tensor([[ ... ]])  -->  dim = 1 x (N  * K)
+support_nodes  -->  tensor([[[ . ], [ . ], ..., [ . ]]])  -->  dim = 1 x num_attributes x 1
+task_num  -->  dim(support_nodes).index(0) = 1
