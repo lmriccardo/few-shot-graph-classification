@@ -1,6 +1,5 @@
 """ For the source of this code check-out https://github.com/NingMa-AI/AS-MAML/blob/master/models/meta_ada.py """
 
-from typing import final
 import torch
 import torch.nn as nn
 import torch.optim as optim
