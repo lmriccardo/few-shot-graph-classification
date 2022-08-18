@@ -2,7 +2,7 @@ from os import rename
 import torch
 import torch_geometric.data as gdata
 
-from utils.utils import rename_edge_indexes
+from utils.utils import task_sampler_uncollate
 
 from typing import List
 import random
@@ -117,65 +117,6 @@ class TaskBatchSampler(torch.utils.data.Sampler):
     def __len__(self):
         return len(self.task_sampler) // self.task_batch_size
 
-    def create_batches_from_data_batch(self, data_batch):
-        """
-        Assume L = [x1, x2, x3, ..., xN] is the data_batch
-        each xi is a graph. Moreover, we have that
-        L[0:K] = support sample for the first class
-        L[K+1:K+Q] = query sample for the first class
-        In general, we have that 
-
-              L[i * (K + Q) : (i + 1) * (K + Q)]
-
-        is the (support, query) pair for the i-th class
-        Finally, the first batch is the one that goes from
-        L[0 : N * (K + Q)], so
-
-              L[i * N * (K + Q) : (i + 1) * N * (K + Q)]
-
-        is the i-th batch. 
-        """
-        n_way = self.task_sampler.n_way
-        k_shot = self.task_sampler.k_shot
-        n_query = self.task_sampler.n_query
-
-        total_support_query_number = n_way * (k_shot + n_query)
-        support_plus_query = k_shot + n_query
-
-        # Initialize batch list for support and query set
-        support_data_batch = []
-        query_data_batch = []
-
-        # I know how many batch do I have, so
-        for batch_number in range(self.task_batch_size):
-
-            # I also know how many class do I have in a task
-            for class_number in range(n_way):
-
-                # First of all let's take the i-th batch
-                data_batch_slice = slice(
-                    batch_number * total_support_query_number,
-                    (batch_number + 1) * total_support_query_number
-                )
-                data_batch_per_batch = data_batch[data_batch_slice]
-
-                # Then let's take the (support, query) pair for a class
-                support_query_slice = slice(
-                    class_number * support_plus_query,
-                    (class_number + 1) * support_plus_query
-                )
-                support_query_data = data_batch_per_batch[support_query_slice]
-
-                # Divide support from query
-                support_data = support_query_data[:k_shot]
-                query_data = support_query_data[k_shot:support_plus_query]
-
-                support_data_batch += support_data
-                query_data_batch += query_data
-        
-        # Rename the edges
-        support_data_batch = rename_edge_indexes(support_data_batch)
-        query_data_batch   = rename_edge_indexes(query_data_batch)
-
-        # Create new DataBatchs and return
-        return gdata.Batch.from_data_list(support_data_batch), gdata.Batch.from_data_list(query_data_batch)
+    def uncollate(self, data_batch):
+        """Invoke the uncollate from utils.utils"""
+        return task_sampler_uncollate(self, data_batch)

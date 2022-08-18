@@ -291,4 +291,108 @@ def rename_edge_indexes(data_list: List[gdata.Data]) -> List[gdata.Data]:
         data.edge_index = new_edge_index
     
     return data_list
+
+
+def data_batch_collate(data_list: List[gdata.Data]) -> gdata.Data:
+    """
+    Takes as input a list of data and create a new :obj:`torch_geometric.data.Data`
+    collating all together. This is a replacement for torch_geometric.data.Batch.from_data_list
+
+    :param data_list: a list of torch_geometric.data.Data objects
+    :return: a new torch_geometric.data.Data object
+    """
+    x = None
+    edge_index = None
+    batch = []
+    num_graphs = 0
+    y = None
+    
+    for i_data, data in enumerate(data_list):
+        x = data.x if x is None else torch.vstack((x, data.x))
+        edge_index = data.edge_index if edge_index is None else torch.hstack((edge_index, data.edge_index))
+        batch += [i_data] * data.x.shape[0]
+        num_graphs += 1
+        y = data.y if y is None else torch.hstack((y, data.y))
+    
+    data_batch = gdata.Data(
+        x=x, edge_index=edge_index, batch=torch.tensor(batch),
+        y=y, num_graphs=num_graphs
+    )
+
+    return data_batch
+
+
+def task_sampler_uncollate(task_sampler: 'data.sampler.TaskBatchSampler', data_batch: gdata.Batch):
+    """
+    Takes as input the task sampler and a batch containing both the 
+    support and the query set. It returns two different DataBatch
+    respectively for support and query_set.
+
+    Assume L = [x1, x2, x3, ..., xN] is the data_batch
+    each xi is a graph. Moreover, we have that
+    L[0:K] = support sample for the first class
+    L[K+1:K+Q] = query sample for the first class
+    In general, we have that 
+
+            L[i * (K + Q) : (i + 1) * (K + Q)]
+
+    is the (support, query) pair for the i-th class
+    Finally, the first batch is the one that goes from
+    L[0 : N * (K + Q)], so
+
+            L[i * N * (K + Q) : (i + 1) * N * (K + Q)]
+
+    is the i-th batch.
+
+    :param task_sampler: The task sampler
+    :param data_batch: a batch with support and query set
+    :return: support batch, query batch
+    """
+    n_way = task_sampler.task_sampler.n_way
+    k_shot = task_sampler.task_sampler.k_shot
+    n_query = task_sampler.task_sampler.n_query
+    task_batch_size = task_sampler.task_batch_size
+
+    total_support_query_number = n_way * (k_shot + n_query)
+    support_plus_query = k_shot + n_query
+
+    # Initialize batch list for support and query set
+    support_data_batch = []
+    query_data_batch = []
+
+    # I know how many batch do I have, so
+    for batch_number in range(task_batch_size):
+
+        # I also know how many class do I have in a task
+        for class_number in range(n_way):
+
+            # First of all let's take the i-th batch
+            data_batch_slice = slice(
+                batch_number * total_support_query_number,
+                (batch_number + 1) * total_support_query_number
+            )
+            data_batch_per_batch = data_batch[data_batch_slice]
+
+            # Then let's take the (support, query) pair for a class
+            support_query_slice = slice(
+                class_number * support_plus_query,
+                (class_number + 1) * support_plus_query
+            )
+            support_query_data = data_batch_per_batch[support_query_slice]
+
+            # Divide support from query
+            support_data = support_query_data[:k_shot]
+            query_data = support_query_data[k_shot:support_plus_query]
+
+            support_data_batch += support_data
+            query_data_batch += query_data
+    
+    # Rename the edges
+    support_data = data_batch_collate(rename_edge_indexes(support_data_batch))
+    query_data   = data_batch_collate(rename_edge_indexes(query_data_batch))
+
+    print(support_data)
+
+    # Create new DataBatchs and return
+    return support_data, query_data
         

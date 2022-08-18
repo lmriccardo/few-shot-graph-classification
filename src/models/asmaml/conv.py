@@ -64,7 +64,7 @@ class GCNConv(MessagePassing):
         if edge_weight is None:
             edge_weight = torch.ones((edge_index.size(1), ), dtype=dtype, device=edge_index.device)
 
-        print("Edge Index Size Before --- ", edge_index.shape)
+        print(edge_index)
         
         fill_value = 1 if not improved else 2
         edge_index, edge_weight = add_remaining_self_loops(

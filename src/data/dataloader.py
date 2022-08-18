@@ -47,5 +47,5 @@ class FewShotDataLoader(torch.utils.data.DataLoader):
 
     def __iter__(self):
         for x in super().__iter__():
-            support_batch, query_batch = self.batch_sampler.create_batches_from_data_batch(x)
+            support_batch, query_batch = self.batch_sampler.uncollate(x)
             yield support_batch, query_batch

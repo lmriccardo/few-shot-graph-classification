@@ -17,9 +17,9 @@ GRAPH_A          = os.path.join(ROOT_PATH, "TRIANGLES/TRIANGLES_A.txt")
 T = TypeVar('T')
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-
 LOAD_DATASET = True
 SAVE_PICLKE  = True
+EDGELIMIT_PRINT = 2000
 
 TRIANGLES_NUM_FEATURES = 1
 NHID = 128

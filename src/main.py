@@ -17,6 +17,7 @@ from tqdm import tqdm
 import numpy as np
 
 import torch
+torch.set_printoptions(edgeitems=config.EDGELIMIT_PRINT)
 
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -52,9 +53,9 @@ def run_train(train_dl: FewShotDataLoader, val_dl: FewShotDataLoader, paper: boo
 
         logging.debug("--- Starting Training ---")
 
-        for i, data in enumerate(tqdm(train_dl), 1):
+        for i, data in enumerate(tqdm(train_dl)):
             support_data, query_data = data
-            print("Batch --- ", support_data.batch)
+            print(support_data.edge_index)
 
             # Set support and query data to the GPU
             # support_data = support_data.to(config.DEVICE)
@@ -183,11 +184,11 @@ def main():
     )
 
     logging.debug("--- Getting the First Sample ---")
-    support, query = next(iter(train_dataloader))
-    print("\n- Support Sample Batch: ", support)
-    print("- Query Sample Batch: ", query)
-    print("- Support Sample Graph Index: ", support.edge_index)
-    print()
+    # support, query = next(iter(train_dataloader))
+    # print("\n- Support Sample Batch: ", support)
+    # print("- Query Sample Batch: ", query)
+    # print("- Support Sample Graph Index: ", support.edge_index)
+    # print()
 
     run_train(train_dataloader, validation_dataloader)
 
