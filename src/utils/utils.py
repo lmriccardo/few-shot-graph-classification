@@ -10,6 +10,8 @@ import torch
 import numpy as np
 import torch_geometric.data as gdata
 import random
+from functools import wraps
+import time
 
 
 def plot_graph(G : Union[nx.Graph, nx.DiGraph], name: str) -> None:
@@ -229,3 +231,64 @@ class GeneratorTxt2Graph:
         self._collect_graph_labels(graphs)
 
         return graphs
+
+
+def elapsed_time(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        start = time.time()
+        func(*args, **kwargs)
+        end = time.time()
+        logging.debug("Elapsed Time: {:.6f}".format(end - start))
+    
+    return wrapper
+
+
+def get_max_acc(accs, step, scores, min_step, test_step):
+    step = np.argmax(scores[min_step - 1 : test_step]) + min_step - 1
+    return accs[step]
+
+
+def rename_edge_indexes(data_list: List[gdata.Data]) -> List[gdata.Data]:
+    """
+    Takes as input a bunch of :obj:`torch_geometric.data.Data` and renames
+    each edge node (x, y) from 1 to total number of nodes. For instance, if we have
+    this edge_index = [[1234, 1235, 1236, 1237], [1238, 1239, 1230,1241]] this became
+    egde_index = [[0, 1, 2, 3],[4, 5, 6, 7]] and so on. 
+
+    :param data_list: the list of :obj:`torch_geometric.data.Data`
+    :return: a new list of data
+    """
+    # First of all let's compute the total number of nodes overall
+    total_number_nodes = 0
+    for data in data_list:
+        total_number_nodes += data.x.shape[0]
+    
+    # Generate the new nodes
+    nodes = torch.arange(0, total_number_nodes)
+    
+    # Takes the old nodes from the edge_index attribute
+    old_nodes = None
+    for data in data_list:
+        x, y = data.edge_index
+        x = torch.hstack((x, y)).unique()
+        
+        if old_nodes is None:
+            old_nodes = x
+            continue
+    
+        old_nodes = torch.hstack((old_nodes, x))
+    
+    # Create mapping from old to new nodes
+    mapping = dict(zip(old_nodes.tolist(), nodes.tolist()[:old_nodes.shape[0]]))
+    
+    # Finally, map the new nodes
+    for data in data_list:
+        x, y = data.edge_index
+        new_x = torch.tensor(list(map(lambda x: mapping[x], x.tolist())), dtype=x.dtype, device=x.device)
+        new_y = torch.tensor(list(map(lambda y: mapping[y], y.tolist())), dtype=y.dtype, device=y.device)
+        new_edge_index = torch.vstack((new_x, new_y))
+        data.edge_index = new_edge_index
+    
+    return data_list
+        

@@ -1,6 +1,8 @@
 import os
 from typing import TypeVar
 
+import torch
+
 
 ROOT_PATH = os.getcwd()
 
@@ -13,6 +15,8 @@ GRAPH_INDICATOR  = os.path.join(ROOT_PATH, "TRIANGLES/TRIANGLES_graph_indicator.
 GRAPH_A          = os.path.join(ROOT_PATH, "TRIANGLES/TRIANGLES_A.txt")
 
 T = TypeVar('T')
+
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 LOAD_DATASET = True
 SAVE_PICLKE  = True

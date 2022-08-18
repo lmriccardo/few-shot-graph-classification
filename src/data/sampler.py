@@ -1,5 +1,8 @@
+from os import rename
 import torch
 import torch_geometric.data as gdata
+
+from utils.utils import rename_edge_indexes
 
 from typing import List
 import random
@@ -169,6 +172,10 @@ class TaskBatchSampler(torch.utils.data.Sampler):
 
                 support_data_batch += support_data
                 query_data_batch += query_data
+        
+        # Rename the edges
+        support_data_batch = rename_edge_indexes(support_data_batch)
+        query_data_batch   = rename_edge_indexes(query_data_batch)
 
         # Create new DataBatchs and return
         return gdata.Batch.from_data_list(support_data_batch), gdata.Batch.from_data_list(query_data_batch)

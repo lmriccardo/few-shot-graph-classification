@@ -9,24 +9,27 @@ import torch_geometric.data as gdata
 
 import numpy as np
 
-from utils.utils import get_batch_number
+from models.asmaml.stopcontrol import StopControl
+
 import config
 import math
 
 
 class AdaptiveStepMAML(nn.Module):
     """ The Meta-Learner Class """
-    def __init__(self, model, inner_lr, outer_lr, stop_lr, weight_decay) -> None:
+    def __init__(self, model, inner_lr, outer_lr, stop_lr, weight_decay, paper) -> None:
+        super().__init__()
         self.net          = model
         self.inner_lr     = inner_lr
         self.outer_lr     = outer_lr
         self.stop_lr      = stop_lr
         self.weight_decay = weight_decay
+        self.paper        = paper
 
         self.task_index = 1
 
         self.stop_prob = 0.5
-        self.stop_gate = self.StopControl(config.STOP_CONTROL_INPUT_SIZE, config.STOP_CONTROL_HIDDEN_SIZE)
+        self.stop_gate = StopControl(config.STOP_CONTROL_INPUT_SIZE, config.STOP_CONTROL_HIDDEN_SIZE)
 
         self.meta_optim = self.configure_optimizers()
 
@@ -97,9 +100,12 @@ class AdaptiveStepMAML(nn.Module):
     def forward(self, support_data: gdata.batch.Batch, query_data: gdata.batch.Batch):
         # In the paper's code, they compute the so-called task_num. 
         # However, it's value is always 1. For this reason, I decided to not use it
+        if self.paper:
+            (support_nodes, support_edge_index, support_graph_indicator, support_label) = support_data
+            (query_nodes, query_edge_index, query_graph_indicator, query_label) = query_data
 
         # It is just the number of labels to predict in the query set
-        query_size = query_data.y.shape[0]
+        query_size = query_data.y.shape[0] if not self.paper else query_label.size()[1]
 
         losses_q = []  # Losses on query data
         corrects, stop_gates, train_losses, train_accs, scores = [], [], [], [], []
@@ -117,9 +123,13 @@ class AdaptiveStepMAML(nn.Module):
 
         for k in range(0, ada_step):
             # Run the i-th task and compute the loss
-            logits, score, _ = self.net(support_data.x, support_data.edge_index, support_data.batch)
+            if not self.paper:
+                logits, score, _ = self.net(support_data.x, support_data.edge_index, support_data.batch)
+                loss = self.compute_loss(logits, support_data.y)
+            else:
+                logits, score, _ = self.net(support_nodes[0], support_edge_index[0], support_graph_indicator[0])
+                loss = self.compute_loss(logits, support_label[0])
 
-            loss = self.compute_loss(logits, support_data.y)
             stop_probability = 0
             if config.FLEXIBLE_STEP:
                 stop_probability = self.stop(k, loss, score)
@@ -127,6 +137,15 @@ class AdaptiveStepMAML(nn.Module):
             
             stop_gates.append(stop_probability)
             scores.append(score.item())
+
+            with torch.no_grad():
+                pred = F.softmax(logits, dim=1).argmax(dim=1)
+                if not self.paper:
+                    correct = torch.eq(pred, support_data.y).sum().item()
+                    train_accs.append(correct / support_data.y.shape[0])
+                else:
+                    correct = torch.eq(pred, support_label[0]).sum().item()
+                    train_accs.append(correct / support_label.size(0))
 
             step = k
             train_losses.append(loss.item())
@@ -142,14 +161,21 @@ class AdaptiveStepMAML(nn.Module):
                 
                 fast_parameters.append(weight.fast)
             
-            logits_q, _, _ = self.net(query_data.x, query_data.edge_index, query_data.batch)
-            loss_q = self.compute_loss(logits_q, query_data.y)
+            if not self.paper:
+                logits_q, _, _ = self.net(query_data.x, query_data.edge_index, query_data.batch)
+                loss_q = self.compute_loss(logits_q, query_data.y)
+            else:
+                logits_q, _, _ = self.net(query_nodes[0], query_edge_index[0], query_graph_indicator[0])
+                loss_q = self.compute_loss(logits_q, query_label[0])
 
             losses_q.append(loss_q)
 
             with torch.no_grad():
                 pred_q = F.softmax(logits_q, dim=1).argmax(dim=1)
-                correct = torch.eq(pred_q, query_data.y).sum().item()
+                if not self.paper:
+                    correct = torch.eq(pred_q, query_data.y).sum().item()
+                else:
+                    correct = torch.eq(pred_q, query_label[0]).sum().item()
                 corrects.append(correct)
         
         
@@ -187,7 +213,12 @@ class AdaptiveStepMAML(nn.Module):
         return accs * 100, step, final_loss.item(), total_loss.item(), stop_gates, scores, train_losses, train_accs
 
     def finetuning(self, support_data, query_data):
-        query_size = query_data.y.shape[0]
+        if self.paper:
+            (support_nodes, support_edge_index, support_graph_indicator, support_label) = support_data
+            (query_nodes, query_edge_index, query_graph_indicator, query_label) = query_data
+
+        # It is just the number of labels to predict in the query set
+        query_size = query_data.y.shape[0] if not self.paper else query_label.size()[1]
 
         corrects = []
         step = 0
@@ -201,8 +232,13 @@ class AdaptiveStepMAML(nn.Module):
         ada_step = min(self.update_step_test, self.min_step + int(2 / self.stop_prob))
 
         for k in range(ada_step):
-            logits, score, _ = self.net(support_data.x, support_data.edge_index, support_data.batch)
-            loss = self.compute_loss(logits, support_data.y)
+            if not self.paper:
+                logits, score, _ = self.net(support_data.x, support_data.edge_index, support_data.batch)
+                loss = self.compute_loss(logits, support_data.y)
+            else:
+                logits, score, _ = self.net(support_nodes[0], support_edge_index[0], support_graph_indicator[0])
+                loss = self.compute_loss(logits, support_label[0])
+
             stop_probability = 0
 
             if config.FLEXIBLE_STEP:
@@ -224,8 +260,13 @@ class AdaptiveStepMAML(nn.Module):
 
                 fast_parameters.append(weight.fast)
 
-            logits_q, _, graph_emb = self.net(query_data.x, query_data.edge_index, query_data.batch)
-            self.graph_labels.append(query_data.y)
+            if not self.paper:
+                logits_q, _, graph_emb = self.net(query_data.x, query_data.edge_index, query_data.batch)
+                self.graph_labels.append(query_data.y)
+            else:
+                logits_q, _, graph_emb = self.net(query_nodes[0], query_edge_index[0], query_graph_indicator[0])
+                self.graph_labels.append(query_label[0])
+
             self.graph_embs.append(graph_emb)
 
             if self.index % 1 == 0:
@@ -237,9 +278,18 @@ class AdaptiveStepMAML(nn.Module):
             
             with torch.no_grad():
                 pred_q = F.softmax(logits_q, dim=1).argmax(dim=1)
-                correct = torch.eq(pred_q, query_data.y).sum().item()
+                if not self.paper:
+                    correct = torch.eq(pred_q, query_data.y).sum().item()
+                else:
+                    correct = torch.eq(pred_q, query_label[0]).sum().item()
+
                 corrects.append(correct)
-                loss_query = self.compute_loss(logits_q, query_data.y)
+
+                if not self.paper:
+                    loss_query = self.compute_loss(logits_q, query_data.y)
+                else:
+                    loss_query = self.compute_loss(logits_q, query_label[0])
+                    
                 query_loss.append(loss_query.item())
 
         accs = 100 * np.array(corrects) / query_size

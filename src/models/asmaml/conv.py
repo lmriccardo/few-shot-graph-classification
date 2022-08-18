@@ -63,6 +63,8 @@ class GCNConv(MessagePassing):
         """Compute the Norm"""
         if edge_weight is None:
             edge_weight = torch.ones((edge_index.size(1), ), dtype=dtype, device=edge_index.device)
+
+        print("Edge Index Size Before --- ", edge_index.shape)
         
         fill_value = 1 if not improved else 2
         edge_index, edge_weight = add_remaining_self_loops(
@@ -70,6 +72,15 @@ class GCNConv(MessagePassing):
         )
 
         row, col = edge_index
+        print("Row --- ", row, row.shape)
+        print("Col --- ", col, col.shape)
+
+        print("Num nodes --- ", num_nodes)
+
+        print("Edge Weight --- ", edge_weight, edge_weight.shape)
+
+        # src = edge_weight
+        # index = row
         deg = scatter_add(edge_weight, row, dim=0, dim_size=num_nodes)
         deg_inv_sqrt = deg.pow(-0.5)
         deg_inv_sqrt[deg_inv_sqrt == float('inf')] = 0
@@ -78,10 +89,7 @@ class GCNConv(MessagePassing):
     
     def forward(self, x, edge_index, edge_weight=None):
         """The forward method"""
-        if self.weight.fast is not None:
-            x = torch.matmul(x, self.weight.fast)
-        else:
-            x = torch.matmul(x, self.weight)
+        x = x @ (self.weight if self.weight.fast is None else self.weight.fast)
 
         if self.cached and self.cached_result is not None:
             if edge_index.size(1) != self.cached_num_edges:
@@ -90,6 +98,9 @@ class GCNConv(MessagePassing):
                     'disable the caching behavior of this layer by removing '
                     'the `cached=True` argument in its constructor.'.format(
                         self.cached_num_edges, edge_index.size(1)))
+
+        print("Node dim --- ", self.node_dim)
+        print("X.size --- ", x.size(), x.size(-2))
 
         if not self.cached or self.cached_result is None:
             self.cached_num_edges = edge_index.size(1)
@@ -103,7 +114,7 @@ class GCNConv(MessagePassing):
         return self.propagate(edge_index, x=x, norm=norm)
     
     def message(self, x_j, norm):
-        return norm.view(-1, -1) * x_j
+        return norm.view(-1, 1) * x_j
     
     def update(self, aggr_out):
         if self.bias is not None:

@@ -4,7 +4,8 @@ import numpy as np
 import pickle
 import torch.utils.data as data
 import torch
-import tqdm
+
+from main import run_train
 
 
 def setup_seed(seed=42):
@@ -188,40 +189,7 @@ def main():
         epoch_size=200
     )
 
-    sample = next(iter(loader(1)))
-    support_data, query_data = sample
-
-    (support_nodes, support_edge_index, support_graph_indicator, support_label) = support_data
-    (query_nodes, query_edge_index, query_graph_indicator, query_label) = query_data
-
-    print("Support Labels --- ", support_label)
-    print("Support Labels Size --- ", support_label.size())
-
-    print("Support Nodes --- ", support_nodes)
-    print("Support Nodes Size --- ", support_nodes.size())
-    print("Task Num --- ", support_nodes.size()[0])
-
-    print("Query Labels --- ", query_label)
-    print("Query Labels Size --- ", query_label.size()[1])
-
-    print("Support Nodes - ith --- ", support_nodes[0])
-    print("Support Nodes Size - ith --- ", support_nodes[0].size())
-
-    print("Support Edge Index - ith --- ", support_edge_index[0])
-    print("Support Edge Index Size - ith --- ", support_edge_index[0].size())
-    print("Transposed Support Edge Index - ith --- ", support_edge_index[0].transpose(0, 1))
-
-    print("Support Graph Indicator - ith --- ", support_graph_indicator[0])
-    print("Support Graph Indicator Size - ith --- ", support_graph_indicator[0].size())
-    
-    # for i, data in enumerate(tqdm.tqdm(loader(1)), 1):
-    #     support_data, query_data = data
-
-    #     (support_nodes, support_edge_index, support_graph_indicator, support_label) = support_data
-    #     (query_nodes, query_edge_index, query_graph_indicator, query_label) = query_data
-
-    #     print("Task Num --- ", support_nodes.size()[0])
-
+    run_train(train_dl=loader(42), val_dl=None, paper=True)
 
 if __name__ == "__main__":
     main()
