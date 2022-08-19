@@ -126,4 +126,4 @@ class GCN4MAML(nn.Module):
         x = self.relu(self.linear2(x), negative_slope=0.1)
         x = self.linear3(x)
 
-        return x, score.mean()
+        return x, score.mean(), None

@@ -57,7 +57,7 @@ class AdaptiveStepMAML(nn.Module):
                )
         
     def compute_loss(self, logits: torch.Tensor, label: torch.Tensor) -> float:
-        return self.loss(logits.squeeze(), label.double().squeeze())
+        return self.loss(logits, label.long())
 
     @staticmethod
     def smooth(weight, p=10, eps=1e-10):
@@ -154,10 +154,10 @@ class AdaptiveStepMAML(nn.Module):
             grad = torch.autograd.grad(loss, fast_parameters, create_graph=True)
             fast_parameters = []
             for index, weight in enumerate(self.net.parameters()):
-                if weight.fast:
-                    weight.fast = weight - self.inner_lr * grad[index]
-                else:
+                if weight.fast is not None:
                     weight.fast = weight.fast - self.inner_lr * grad[index]
+                else:
+                    weight.fast = weight - self.inner_lr * grad[index]
                 
                 fast_parameters.append(weight.fast)
             
@@ -178,14 +178,13 @@ class AdaptiveStepMAML(nn.Module):
                     correct = torch.eq(pred_q, query_label[0]).sum().item()
                 corrects.append(correct)
         
-        
-        final_loss = loss_q[step]
+        final_loss = losses_q[step]
         accs = np.array(corrects) / (query_size)
         final_acc = accs[step]
         total_loss = 0
 
         if config.FLEXIBLE_STEP:
-            for step, (stop_gate, step_acc) in enumerate(zip(stop_gate[config.MIN_STEP - 1:], accs[config.MIN_STEP - 1:])):
+            for step, (stop_gate, step_acc) in enumerate(zip(stop_gates[config.MIN_STEP - 1:], accs[config.MIN_STEP - 1:])):
                 assert stop_gate >= 0.0 and stop_gate <= 1.0, "stop_gate error value: {:.5f}".format(stop_gate)
                 log_prob = torch.log(1 - stop_gate)
                 tem_loss = - log_prob * ((final_acc - step_acc - (np.exp(step) - 1) * config.STEP_PENALITY))

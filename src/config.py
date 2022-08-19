@@ -8,11 +8,11 @@ ROOT_PATH = os.getcwd()
 
 TRIANGLES_DATA_URL = "https://cloud-storage.eu-central-1.linodeobjects.com/TRIANGLES.zip"
 
-GRAPH_ATTRIBUTE  = os.path.join(ROOT_PATH, "TRIANGLES/TRIANGLES_graph_attributes.txt")
-GRAPH_LABELS     = os.path.join(ROOT_PATH, "TRIANGLES/TRIANGLES_graph_labels.txt")
-NODE_NATTRIBUTE  = os.path.join(ROOT_PATH, "TRIANGLES/TRIANGLES_node_attributes.txt")
-GRAPH_INDICATOR  = os.path.join(ROOT_PATH, "TRIANGLES/TRIANGLES_graph_indicator.txt")
-GRAPH_A          = os.path.join(ROOT_PATH, "TRIANGLES/TRIANGLES_A.txt")
+TRIANGLES_GRAPH_ATTRIBUTE  = os.path.join(ROOT_PATH, "TRIANGLES/TRIANGLES_graph_attributes.txt")
+TRIANGLES_GRAPH_LABELS     = os.path.join(ROOT_PATH, "TRIANGLES/TRIANGLES_graph_labels.txt")
+TRIANGLES_NODE_NATTRIBUTE  = os.path.join(ROOT_PATH, "TRIANGLES/TRIANGLES_node_attributes.txt")
+TRIANGLES_GRAPH_INDICATOR  = os.path.join(ROOT_PATH, "TRIANGLES/TRIANGLES_graph_indicator.txt")
+TRIANGLES_GRAPH_A          = os.path.join(ROOT_PATH, "TRIANGLES/TRIANGLES_A.txt")
 
 T = TypeVar('T')
 

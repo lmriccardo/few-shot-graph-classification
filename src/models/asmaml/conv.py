@@ -63,8 +63,6 @@ class GCNConv(MessagePassing):
         """Compute the Norm"""
         if edge_weight is None:
             edge_weight = torch.ones((edge_index.size(1), ), dtype=dtype, device=edge_index.device)
-
-        print(edge_index)
         
         fill_value = 1 if not improved else 2
         edge_index, edge_weight = add_remaining_self_loops(
@@ -72,12 +70,6 @@ class GCNConv(MessagePassing):
         )
 
         row, col = edge_index
-        print("Row --- ", row, row.shape)
-        print("Col --- ", col, col.shape)
-
-        print("Num nodes --- ", num_nodes)
-
-        print("Edge Weight --- ", edge_weight, edge_weight.shape)
 
         # src = edge_weight
         # index = row
@@ -98,9 +90,6 @@ class GCNConv(MessagePassing):
                     'disable the caching behavior of this layer by removing '
                     'the `cached=True` argument in its constructor.'.format(
                         self.cached_num_edges, edge_index.size(1)))
-
-        print("Node dim --- ", self.node_dim)
-        print("X.size --- ", x.size(), x.size(-2))
 
         if not self.cached or self.cached_result is None:
             self.cached_num_edges = edge_index.size(1)
@@ -126,4 +115,8 @@ class GCNConv(MessagePassing):
         return aggr_out
     
     def __repr__(self):
-        return '{}({}, {})'.format(self.__class__.__name__, self.in_channels, self.out_channels)
+        return '{}({}, {})'.format(
+            self.__class__.__name__, 
+            self.in_channels, 
+            self.out_channels
+        )

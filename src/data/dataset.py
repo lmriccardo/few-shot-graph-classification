@@ -15,6 +15,7 @@ class GraphDataset(gdata.Dataset):
         super(GraphDataset, self).__init__()
         self.graphs_ds = graphs_ds
 
+    # FIXME: Download the right dataset (given the name) and extract graphs correctly
     @staticmethod
     def get_graphs(download: bool = True) -> None:
         """ Download the dataset from the Internet """
@@ -24,19 +25,19 @@ class GraphDataset(gdata.Dataset):
             response = requests.get(config.TRIANGLES_DATA_URL)
 
             # Save the content as a zip file
-            with open(f"{config.ROOT_PATH}/TRIANGLES.zip", mode="wb") as iofile:
+            with open(f"{config.ROOT_PATH}/data/TRIANGLES.zip", mode="wb") as iofile:
                 iofile.write(response.content)
 
             # Extract the file
             logging.debug("--- Extracting files from the archive ---")
-            with zipfile.ZipFile(f"{config.ROOT_PATH}/TRIANGLES.zip", mode="r") as zip_ref:
+            with zipfile.ZipFile(f"{config.ROOT_PATH}/data/TRIANGLES.zip", mode="r") as zip_ref:
                 zip_ref.extractall(config.ROOT_PATH)
 
-        graph_attribute = open(config.GRAPH_ATTRIBUTE).readlines()
-        graph_labels = open(config.GRAPH_LABELS).readlines()
-        graph_node_attribute = open(config.NODE_NATTRIBUTE).readlines()
-        graph_indicator = open(config.GRAPH_INDICATOR).readlines()
-        graph_a = open(config.GRAPH_A).readlines()
+        graph_attribute = open(config.TRIANGLES_GRAPH_ATTRIBUTE).readlines()
+        graph_labels = open(config.TRIANGLES_GRAPH_LABELS).readlines()
+        graph_node_attribute = open(config.TRIANGLES_NODE_NATTRIBUTE).readlines()
+        graph_indicator = open(config.TRIANGLES_GRAPH_INDICATOR).readlines()
+        graph_a = open(config.TRIANGLES_GRAPH_A).readlines()
 
         graphs_gen = GeneratorTxt2Graph(
             graph_attribute=graph_attribute,

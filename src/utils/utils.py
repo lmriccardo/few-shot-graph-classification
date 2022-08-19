@@ -1,7 +1,8 @@
+import pickle
 import networkx as nx
 import numpy as np
 import plotly.graph_objects as go
-from typing import Dict, List, Tuple, Union
+from typing import Any, Dict, List, Tuple, Union
 import config
 import os
 import shutil
@@ -97,6 +98,7 @@ def plot_graph(G : Union[nx.Graph, nx.DiGraph], name: str) -> None:
     fig.show()
 
 
+# FIXME: Delete the folder that corrisponds to the right dataset
 def delete_data_folder() -> None:
     """Delete the folder containing data"""
     logging.debug("--- Removing Content Data ---")
@@ -123,6 +125,7 @@ def get_batch_number(databatch, i_batch, n_way, k_shot):
     return gdata.Batch.from_data_list(databatch[indices * dim_databatch + i_batch])
 
 
+# FIXME: Rewrite the extractor starting from .pickle files
 class GeneratorTxt2Graph:
     """
     Takes as input a number of graph attributes, labels,
@@ -204,8 +207,6 @@ class GeneratorTxt2Graph:
             graph_i = graphs[str(i + 1)]
             graphs[str(i + 1)] = (graph_i, label[:-1])
 
-    # TODO: _collect_node_labels, _collect_edge_labels, _collect_edge_attributes
-
     def generate(self) -> Dict[str, nx.Graph]:
         """ Return a dictionary of {i : Graph_i} """
         # Get Nodes and Edges
@@ -226,6 +227,14 @@ class GeneratorTxt2Graph:
             g.add_edges_from(g_edges)
 
             graphs[graph_id] = g
+        
+        # Collect graphs without any edges
+        for graph_id, node in nodes.items():
+            if graph_id not in graphs:
+                g = nx.Graph()
+                g.add_nodes_from(node)
+
+                graphs[graph_id] = g
 
         # Set labels for graph
         self._collect_graph_labels(graphs)
@@ -233,7 +242,125 @@ class GeneratorTxt2Graph:
         return graphs
 
 
+def save_with_pickle(path2save: str, content: Any) -> None:
+    """Save content inside a .pickle file denoted by path2save"""
+    path2save = path2save + ".pickle" if ".pickle" not in path2save else path2save
+    with open(path2save, mode="wb") as iostream:
+        pickle.dump(content, iostream)
+
+
+def load_with_pickle(path2load: str) -> Any:
+    """Load a content from a .pickle file"""
+    with open(path2load, mode="rb") as iostream:
+        return pickle.load(iostream)
+
+
+def compute_num_nodes(graph_list: Dict[str, Tuple[nx.Graph, str]]) -> int:
+    """Given a dictionary of graphs, it returns the total number of nodes"""
+    num_nodes = 0
+    for _, (graph, _) in graph_list.items():
+        num_nodes += graph.number_of_nodes()
+    
+    return num_nodes
+
+def convert(graph_list: Dict[str, Tuple[nx.Graph, str]], 
+            num_nodes : int) -> Tuple[Dict[str, dict], torch.Tensor]:
+    """
+    It takes as input a dictionary of (graph_id, (:obj:`networkx.Graph`, str))
+    and the number of nodes and return a transformed dataset and nodes attributes. 
+    The transformed dataset is as following, it is a dict with three keys: 
+
+        - 'label2graphs': a dictionary with keys labels and values
+                          values a list of graphs with that label
+        - 'graph2nodes' : a dictionary with keys graphs id and values
+                          a list containing all nodes of that graph
+        - 'graph2edges' : a dictionary with keys graphs id and values
+                          a list of edges (x, y) for that graph
+    
+    Finally, attributes is just a list of attributes such that, in position 'i'
+    there is the attribute vector for the node with id 'i'.
+
+    :param graph_list: a dictionary of (graph_id, (:obj:`networkx.Graph`, str))
+    :param num_nodes: the total number of nodes
+    :return: the transformed dataset and the attributes
+    """
+    label2graphs = dict()
+    graph2nodes = dict()
+    graph2edges = dict()
+    attributes = [0] * num_nodes
+
+    for i_graph, (graph, label) in graph_list.items():
+        label = int(label)
+        i_graph = int(i_graph)
+
+        # Populate label2graph
+        if label not in label2graphs:
+            label2graphs[label] = []
+
+        label2graphs[label].append(i_graph)
+
+        # Populate graph2nodes
+        if i_graph not in graph2nodes:
+            graph2nodes[i_graph] = []
+        
+        graph2nodes[i_graph] = list(graph.nodes())
+
+        # Populate attributes
+        nodes_attrs = graph.nodes(data=True)
+        for node_i, attrs in nodes_attrs:
+            attrs_list = list(map(lambda x: float(x), attrs.values()))
+            attributes[node_i - 1] = attrs_list if attrs_list else [.0, .0]
+        
+        # Populate graph2edges
+        if i_graph not in graph2edges:
+            graph2edges[i_graph] = []
+        
+        graph2edges[i_graph] = list(map(list, graph.edges()))
+
+    total_data = {
+        "label2graphs" : label2graphs,
+        "graph2nodes"  : graph2nodes,
+        "graph2edges"  : graph2edges
+    }
+
+    attributes = torch.tensor(attributes)
+
+    return total_data, attributes
+
+
+def split(data: Dict[str, dict], train_percentage: float=80.0) -> Tuple[Dict[str, dict], Dict[str, dict]]:
+    """split the data into train and test set"""
+    all_labels = torch.tensor(list(data["label2graphs"].keys())).unique()
+    num_labels = all_labels.shape[0]
+    num_train  = num_labels * train_percentage // 100
+    sampled_labels = random.sample(all_labels.tolist(), int(num_train))
+
+    train_label2graphs = {k : v for k, v in data["label2graphs"].items() if k in sampled_labels}
+    remaining_graphs   = torch.tensor(list(train_label2graphs.values())).view(1, -1)[0].tolist()
+    train_graph2nodes  = {k : v for k, v in data["graph2nodes"].items() if k in remaining_graphs}
+    train_graph2edges  = {k : v for k, v in data["graph2edges"].items() if k in remaining_graphs}
+
+    train_data = {
+        "label2graphs" : train_label2graphs,
+        "graph2nodes"  : train_graph2nodes,
+        "graph2edges"  : train_graph2edges
+    }
+
+    test_label2graphs = {k : v for k, v in data["label2graphs"].items() if k not in sampled_labels}
+    test_graph2nodes  = {k : v for k, v in data["graph2nodes"].items() if k not in remaining_graphs}
+    test_graph2edges  = {k : v for k, v in data["graph2edges"].items() if k not in remaining_graphs}
+
+    test_data = {
+        "label2graphs" : test_label2graphs,
+        "graph2nodes"  : test_graph2nodes,
+        "graph2edges"  : test_graph2edges
+    }
+
+    return train_data, test_data
+
+
 def elapsed_time(func):
+    """Just a simple wrapper for counting elapsed time from start to end"""
     @wraps(func)
     def wrapper(*args, **kwargs):
         start = time.time()
@@ -271,7 +398,7 @@ def rename_edge_indexes(data_list: List[gdata.Data]) -> List[gdata.Data]:
     old_nodes = None
     for data in data_list:
         x, y = data.edge_index
-        x = torch.hstack((x, y)).unique()
+        x = torch.hstack((x, y)).unique(sorted=False)
         
         if old_nodes is None:
             old_nodes = x
@@ -306,6 +433,9 @@ def data_batch_collate(data_list: List[gdata.Data]) -> gdata.Data:
     batch = []
     num_graphs = 0
     y = None
+
+    # Do a shuffle of the data
+    random.shuffle(data_list)
     
     for i_data, data in enumerate(data_list):
         x = data.x if x is None else torch.vstack((x, data.x))
@@ -313,10 +443,19 @@ def data_batch_collate(data_list: List[gdata.Data]) -> gdata.Data:
         batch += [i_data] * data.x.shape[0]
         num_graphs += 1
         y = data.y if y is None else torch.hstack((y, data.y))
+
+    # Create a mapping between y and a range(0, num_classes_of_y)
+    # First we need to compute how many classes do we have
+    num_classes = y.unique().shape[0]
+    classes = list(range(0, num_classes))
+    mapping = dict(zip(y.unique(sorted=False).tolist(), classes))
+    
+    # This mapping is necessary when computing the cross-entropy-loss
+    new_y = torch.tensor(list(map(lambda x: mapping[x], y.tolist())), dtype=y.dtype, device=y.device)
     
     data_batch = gdata.Data(
         x=x, edge_index=edge_index, batch=torch.tensor(batch),
-        y=y, num_graphs=num_graphs
+        y=new_y, num_graphs=num_graphs, old_classes_mapping=mapping
     )
 
     return data_batch
@@ -390,8 +529,6 @@ def task_sampler_uncollate(task_sampler: 'data.sampler.TaskBatchSampler', data_b
     # Rename the edges
     support_data = data_batch_collate(rename_edge_indexes(support_data_batch))
     query_data   = data_batch_collate(rename_edge_indexes(query_data_batch))
-
-    print(support_data)
 
     # Create new DataBatchs and return
     return support_data, query_data
