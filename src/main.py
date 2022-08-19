@@ -10,7 +10,7 @@ from data.sampler import TaskBatchSampler
 from utils.utils import (
     delete_data_folder, setup_seed, 
     get_batch_number, elapsed_time, 
-    get_max_acc, download_zipped_data
+    get_max_acc
 )
 from models.asmaml.asmaml import AdaptiveStepMAML
 from models.asmaml.gcn4maml import GCN4MAML
@@ -159,11 +159,11 @@ def get_dataloader(
 
 def main():
     setup_seed()
-
-    train_ds, test_ds, val_ds = generate_train_val_test(
-        download_data=False, 
-        perc_train=30, 
-        perc_test=40
+    # data_dir = "../data"
+    train_ds, test_ds, val_ds, data_dir = generate_train_val_test(
+        # data_dir=data_dir,
+        download=config.DOWNLOAD_DATASET, # not config.DOWNLOAD_DATASET,
+        dataset_name="TRIANGLES"
     )
 
     logging.debug("--- Datasets ---")
@@ -186,18 +186,20 @@ def main():
         shuffle=True, batch_size=1
     )
 
-    logging.debug("--- Getting the First Sample ---")
+    # logging.debug("--- Getting the First Sample ---")
     # support, query = next(iter(train_dataloader))
     # print("\n- Support Sample Batch: ", support)
     # print("- Query Sample Batch: ", query)
     # print("- Support Sample Graph Index: ", support.edge_index)
     # print()
 
-    #run_train(train_dataloader, validation_dataloader)
+    run_train(train_dataloader, validation_dataloader)
 
-    # delete_data_folder()
+    # delete_data_folder(data_dir)
 
 
 if __name__ == "__main__":
-    # main()
-    download_zipped_data(config.TRIANGLES_ZIP_URL, "../data", "TRIANGLES")
+    main()
+
+    # from utils.utils import load_with_pickle
+    # print(load_with_pickle("../data/TRIANGLES/TRIANGLES_node_attributes.pickle"))

@@ -1,3 +1,4 @@
+from genericpath import isfile
 import pickle
 import networkx as nx
 import numpy as np
@@ -100,15 +101,10 @@ def plot_graph(G : Union[nx.Graph, nx.DiGraph], name: str) -> None:
     fig.show()
 
 
-# FIXME: Delete the folder that corrisponds to the right dataset
-def delete_data_folder() -> None:
+def delete_data_folder(path2delete: str) -> None:
     """Delete the folder containing data"""
     logging.debug("--- Removing Content Data ---")
-
-    data_folder = os.path.join(config.ROOT_PATH, "TRIANGLES")
-    shutil.rmtree(data_folder)
-    os.remove(data_folder + ".zip")
-    
+    shutil.rmtree(path2delete)
     logging.debug("--- Removed Finished Succesfully ---")
 
 
@@ -698,8 +694,23 @@ def task_sampler_uncollate(task_sampler: 'data.sampler.TaskBatchSampler', data_b
     return support_data, query_data
 
 
-def download_zipped_data(url: str, path2extract: str, dataset_name: str) -> None:
-    """Download and extract a ZIP file from URL"""
+def scandir(root_path: str) -> List[str]:
+    """Recursively scan a directory looking for files"""
+    root_path = os.path.abspath(root_path)
+    content = []
+    for file in os.listdir(root_path):
+        new_path = os.path.join(root_path, file)
+        if os.path.isfile(new_path):
+            content.append(new_path)
+            continue
+        
+        content += scandir(new_path)
+    
+    return content
+
+
+def download_zipped_data(url: str, path2extract: str, dataset_name: str) -> List[str]:
+    """Download and extract a ZIP file from URL. Return the content filename"""
     logging.debug(f"--- Downloading from {url} ---")
     response = requests.get(url)
 
@@ -715,3 +726,5 @@ def download_zipped_data(url: str, path2extract: str, dataset_name: str) -> None
 
     logging.debug(f"--- Removing {zip_path} ---")
     os.remove(zip_path)
+
+    return scandir(os.path.join(path2extract, dataset_name))

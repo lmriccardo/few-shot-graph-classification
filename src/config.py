@@ -1,12 +1,18 @@
-import os
 from typing import TypeVar
-
 import torch
+
 
 TRIANGLES_ZIP_URL = "https://cloud-storage.eu-central-1.linodeobjects.com/TRIANGLES.zip"
 COIL_DEL_ZIP_URL = "https://cloud-storage.eu-central-1.linodeobjects.com/COIL-DEL.zip"
 R52_ZIP_URL = "https://cloud-storage.eu-central-1.linodeobjects.com/R52.zip"
 LETTER_HIGH_ZIP_URL = "https://cloud-storage.eu-central-1.linodeobjects.com/Letter-High.zip"
+
+DATASETS = {
+    "TRIANGLES"   : TRIANGLES_ZIP_URL, 
+    "COIL-DEL"    : COIL_DEL_ZIP_URL, 
+    "R52"         : R52_ZIP_URL, 
+    "Letter-High" : LETTER_HIGH_ZIP_URL
+}
 
 T = TypeVar('T')
 
