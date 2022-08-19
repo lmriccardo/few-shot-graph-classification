@@ -3,25 +3,19 @@ from typing import TypeVar
 
 import torch
 
-
-ROOT_PATH = os.getcwd()
-
-TRIANGLES_DATA_URL = "https://cloud-storage.eu-central-1.linodeobjects.com/TRIANGLES.zip"
-
-TRIANGLES_GRAPH_ATTRIBUTE  = os.path.join(ROOT_PATH, "TRIANGLES/TRIANGLES_graph_attributes.txt")
-TRIANGLES_GRAPH_LABELS     = os.path.join(ROOT_PATH, "TRIANGLES/TRIANGLES_graph_labels.txt")
-TRIANGLES_NODE_NATTRIBUTE  = os.path.join(ROOT_PATH, "TRIANGLES/TRIANGLES_node_attributes.txt")
-TRIANGLES_GRAPH_INDICATOR  = os.path.join(ROOT_PATH, "TRIANGLES/TRIANGLES_graph_indicator.txt")
-TRIANGLES_GRAPH_A          = os.path.join(ROOT_PATH, "TRIANGLES/TRIANGLES_A.txt")
+TRIANGLES_ZIP_URL = "https://cloud-storage.eu-central-1.linodeobjects.com/TRIANGLES.zip"
+COIL_DEL_ZIP_URL = "https://cloud-storage.eu-central-1.linodeobjects.com/COIL-DEL.zip"
+R52_ZIP_URL = "https://cloud-storage.eu-central-1.linodeobjects.com/R52.zip"
+LETTER_HIGH_ZIP_URL = "https://cloud-storage.eu-central-1.linodeobjects.com/Letter-High.zip"
 
 T = TypeVar('T')
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-LOAD_DATASET = True
+DOWNLOAD_DATASET = True
 SAVE_PICLKE  = True
 EDGELIMIT_PRINT = 2000
 
-TRIANGLES_NUM_FEATURES = 1
+NUM_FEATURES = {"TRIANGLES": 1, "R52": 1, "Letter-High": 2, "COIL-DEL": 2}
 NHID = 128
 POOLING_RATIO = 0.5
 DROPOUT_RATIO = 0.3

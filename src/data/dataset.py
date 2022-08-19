@@ -102,8 +102,8 @@ class GraphDataset(gdata.Dataset):
                             ) -> 'GraphDataset':
         """ Return a new Dataset containing only graphs with specific labels """
         logging.debug("--- Creating the Dataset ---")
-        filter = classes[(mask[:, None] == classes[None, :]).any(dim=0)].numpy()\
-            .astype(str)\
+        filter = classes[(mask[:, None] == classes[None, :]).any(dim=0)].numpy() \
+            .astype(str) \
             .tolist()
 
         filtered_graphs = {k: v for k, v in graphs.items() if v[1] in filter}
@@ -119,12 +119,13 @@ def get_all_labels(graphs: Dict[str, Tuple[nx.Graph, str]]) -> torch.Tensor:
     return torch.tensor(list(set([int(v[1]) for _, v in graphs.items()])))
 
 
+# FIXME: 
 def generate_train_val_test(perc_test: float,
                             perc_train: float,
                             download_data: bool=True
 ) -> Tuple[GraphDataset, GraphDataset, GraphDataset]:
     """ Return dataset for training, validation and testing """
-    logging.debug("--- Generating Train, Test and validation datasets --- ")
+    logging.debug("--- Generating Train, Test and Validation datasets --- ")
 
     graphs = GraphDataset.get_graphs(download=download_data)
 
