@@ -1,4 +1,3 @@
-from genericpath import isfile
 import pickle
 import networkx as nx
 import numpy as np
@@ -9,7 +8,6 @@ import os
 import shutil
 import logging
 import torch
-import numpy as np
 import torch_geometric.data as gdata
 import random
 from functools import wraps

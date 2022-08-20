@@ -1,6 +1,5 @@
 """ For the source of this code check-out https://github.com/NingMa-AI/AS-MAML/blob/master/models/GCN4maml.py """
 
-from turtle import forward
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
