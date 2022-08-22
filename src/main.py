@@ -14,6 +14,7 @@ from utils.utils import (
 )
 from models.asmaml.asmaml import AdaptiveStepMAML
 from models.asmaml.gcn4maml import GCN4MAML
+from models.asmaml.sage4maml import SAGE4MAML
 
 import config
 import logging
@@ -31,8 +32,8 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(leve
 def run_train(train_dl: FewShotDataLoader, val_dl: FewShotDataLoader, paper: bool=False):
     """Run the training for optimization"""
     # Model creation
-    gcn4maml = GCN4MAML(num_classes=config.TRAIN_WAY, paper=paper)# .to(config.DEVICE)
-    meta_model = AdaptiveStepMAML(gcn4maml,
+    model = SAGE4MAML(num_classes=config.TRAIN_WAY, paper=paper)# .to(config.DEVICE)
+    meta_model = AdaptiveStepMAML(model,
                                   inner_lr=config.INNER_LR,
                                   outer_lr=config.OUTER_LR,
                                   stop_lr=config.STOP_LR,
@@ -47,6 +48,7 @@ def run_train(train_dl: FewShotDataLoader, val_dl: FewShotDataLoader, paper: boo
     print("=" * 100)
 
     for epoch in range(config.EPOCHS):
+        setup_seed(epoch)
         logging.debug(f"--- Starting Epoch N. {epoch + 1} ---")
         loss_train = 0.0
         correct = 0
@@ -88,13 +90,13 @@ def run_train(train_dl: FewShotDataLoader, val_dl: FewShotDataLoader, paper: boo
         for i, data in enumerate(tqdm(val_dl)):
             support_data, query_data = data
             
-            for support in support_data:
-                support.to(config.DEVICE)
+            # for support in support_data:
+            #     support.to(config.DEVICE)
             
-            for query in query_data:
-                query.to(config.DEVICE)
+            # for query in query_data:
+            #     query.to(config.DEVICE)
             
-            accs, step, stop_gates, scores, query_losses = meta_model.finetunning(support_data, query_data)
+            accs, step, stop_gates, scores, query_losses = meta_model.finetuning(support_data, query_data)
             acc = get_max_acc(accs, step, scores, config.MIN_STEP, config.MAX_STEP)
 
             val_accs.append(accs[step])
@@ -114,23 +116,23 @@ def run_train(train_dl: FewShotDataLoader, val_dl: FewShotDataLoader, paper: boo
 
         if val_acc_avg > max_val_acc:
             max_val_acc = val_acc_avg
-            logging.debug('\nEpoch(***Best***): {:04d},loss_train: {:.6f},acc_train: {:.6f},'
-                                   'acc_val:{:.2f} ±{:.2f},meta_lr: {:.6f},best {:.2f}'.format(
+            print('Epoch(***Best***): {:04d},loss_train: {:.6f},acc_train: {:.6f},'
+                                   'acc_val:{:.2f} ±{:.2f},meta_lr: {:.6f},best {:.2f}\n'.format(
                             epoch, train_loss_avg, train_acc_avg,
                             val_acc_avg, val_acc_ci95, meta_model.get_meta_learning_rate(),
                             max_val_acc
-                        )
+                        )# , file=open("../results/asmaml_gcn.result", mode="a")
             )
 
             # torch.save({'epoch': epoch, 'embedding':meta_model.state_dict(),
             #             # 'optimizer': optimizer.state_dict()
             #             }, os.path.join(config["save_path"], 'best_model.pth'))
         else :
-            logging.debug('\nEpoch: {:04d},loss_train: {:.6f},acc_train: {:.6f},'
-                                    'acc_val:{:.2f} ±{:.2f},meta_lr: {:.6f},best {:.2f}'.format(
+            print('\nEpoch: {:04d},loss_train: {:.6f},acc_train: {:.6f},'
+                                    'acc_val:{:.2f} ±{:.2f},meta_lr: {:.6f},best {:.2f}\n'.format(
                             epoch, train_loss_avg, train_acc_avg, val_acc_avg, 
                             val_acc_ci95, meta_model.get_meta_learning_rate(), max_val_acc
-                        )
+                        )# , file=open("../results/asmaml_gcn.result", mode="a")
             )
 
         meta_model.adapt_meta_learning_rate(train_loss_avg)
@@ -158,11 +160,16 @@ def get_dataloader(
 
 
 def main():
-    setup_seed()
-    # data_dir = "../data"
+    # train_ds, test_ds, val_ds, data_dir = generate_train_val_test(
+    #     # data_dir=data_dir,
+    #     download=config.DOWNLOAD_DATASET, # not config.DOWNLOAD_DATASET,
+    #     dataset_name="TRIANGLES"
+    # )
+
+    data_dir = "../data"
     train_ds, test_ds, val_ds, data_dir = generate_train_val_test(
-        # data_dir=data_dir,
-        download=config.DOWNLOAD_DATASET, # not config.DOWNLOAD_DATASET,
+        data_dir=data_dir,
+        download=not config.DOWNLOAD_DATASET,
         dataset_name="TRIANGLES"
     )
 

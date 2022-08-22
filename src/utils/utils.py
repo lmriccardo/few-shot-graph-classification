@@ -245,6 +245,7 @@ def load_with_pickle(path2load: str) -> Any:
     with open(path2load, mode="rb") as iostream:
         return pickle.load(iostream)
 
+
 def elapsed_time(func):
     """Just a simple wrapper for counting elapsed time from start to end"""
     @wraps(func)
@@ -556,7 +557,7 @@ def rename_edge_indexes(data_list: List[gdata.Data]) -> List[gdata.Data]:
     old_nodes = None
     for data in data_list:
         x, y = data.edge_index
-        x = torch.hstack((x, y)).unique(sorted=False)
+        x = torch.hstack((x, y)).unique()
         
         if old_nodes is None:
             old_nodes = x

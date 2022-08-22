@@ -228,7 +228,7 @@ class AdaptiveStepMAML(nn.Module):
         for weight in self.net.parameters():
             weight.fast = None
         
-        ada_step = min(self.update_step_test, self.min_step + int(2 / self.stop_prob))
+        ada_step = min(config.STEP_TEST, config.MIN_STEP + int(2 / self.stop_prob))
 
         for k in range(ada_step):
             if not self.paper:
@@ -244,7 +244,7 @@ class AdaptiveStepMAML(nn.Module):
                 with torch.no_grad():
                     stop_probability = self.stop(k, loss, score)
             
-            stop_gates.apepnd(stop_probability)
+            stop_gates.append(stop_probability)
             step = k
             scores.append(score.item())
 

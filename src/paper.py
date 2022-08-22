@@ -17,8 +17,9 @@ def setup_seed(seed=42):
 
 
 class GraphDataset(data.Dataset):
-    node_attribute_file = "../TRIANGLES_node_attributes.pickle"
-    train_set_file = "../TRIANGLES_train_set.pickle"
+    node_attribute_file = "../data/TRIANGLES/TRIANGLES_node_attributes.pickle"
+    train_set_file = "../data/TRIANGLES/TRIANGLES_train_set.pickle"
+    val_set_file = "../data/TRIANGLES/TRIANGLES_val_set.pickle"
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__()
@@ -32,8 +33,12 @@ class GraphDataset(data.Dataset):
             self.node_attribute_data = list(
                 map(float, self.node_attribute_data))
 
-        with open(self.train_set_file, mode="rb") as iostream:
-            self.train_set_data = pickle.load(iostream)
+        if not kwargs["val"]:
+            with open(self.train_set_file, mode="rb") as iostream:
+                self.train_set_data = pickle.load(iostream)
+        else:
+            with open(self.val_set_file, mode="rb") as iostream:
+                self.train_set_data = pickle.load(iostream)
 
         for index, node_list in self.train_set_data["graph2nodes"].items():
             for node in node_list:
@@ -176,10 +181,11 @@ class FewShotDataLoader:
 
 
 def main():
-    setup_seed()
+    # setup_seed()
 
-    dataset = GraphDataset()
-    loader = FewShotDataLoader(
+    dataset = GraphDataset(val=False)
+    val_dataset = GraphDataset(val=True)
+    train_loader = FewShotDataLoader(
         dataset=dataset,
         n_way=3,
         k_shot=10,
@@ -189,7 +195,17 @@ def main():
         epoch_size=200
     )
 
-    run_train(train_dl=loader(42), val_dl=None, paper=True)
+    val_loader = FewShotDataLoader(
+        dataset=val_dataset,
+        n_way=3,
+        k_shot=10,
+        n_query=15,
+        batch_size=1,
+        num_workers=4,
+        epoch_size=200
+    )
+
+    run_train(train_dl=train_loader(0), val_dl=val_loader(0), paper=True)
 
 if __name__ == "__main__":
     main()
