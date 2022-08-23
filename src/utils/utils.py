@@ -14,6 +14,8 @@ from functools import wraps
 import time
 import requests
 import zipfile
+from datetime import datetime
+import sys
 
 
 def plot_graph(G : Union[nx.Graph, nx.DiGraph], name: str) -> None:
@@ -557,7 +559,7 @@ def rename_edge_indexes(data_list: List[gdata.Data]) -> List[gdata.Data]:
     old_nodes = None
     for data in data_list:
         x, y = data.edge_index
-        x = torch.hstack((x, y)).unique()
+        x = torch.hstack((x, y)).unique(sorted=False)
         
         if old_nodes is None:
             old_nodes = x
@@ -592,9 +594,6 @@ def data_batch_collate(data_list: List[gdata.Data]) -> gdata.Data:
     batch = []
     num_graphs = 0
     y = None
-
-    # Do a shuffle of the data
-    random.shuffle(data_list)
     
     for i_data, data in enumerate(data_list):
         x = data.x if x is None else torch.vstack((x, data.x))
@@ -708,9 +707,9 @@ def scandir(root_path: str) -> List[str]:
     return content
 
 
-def download_zipped_data(url: str, path2extract: str, dataset_name: str) -> List[str]:
+def download_zipped_data(url: str, path2extract: str, dataset_name: str, logger: logging.Logger) -> List[str]:
     """Download and extract a ZIP file from URL. Return the content filename"""
-    logging.debug(f"--- Downloading from {url} ---")
+    logger.debug(f"--- Downloading from {url} ---")
     response = requests.get(url)
 
     abs_path2extract = os.path.abspath(path2extract)
@@ -719,11 +718,49 @@ def download_zipped_data(url: str, path2extract: str, dataset_name: str) -> List
         iofile.write(response.content)
 
     # Extract the file
-    logging.debug("--- Extracting files from the archive ---")
+    logger.debug("--- Extracting files from the archive ---")
     with zipfile.ZipFile(zip_path, mode="r") as zip_ref:
         zip_ref.extractall(abs_path2extract)
 
-    logging.debug(f"--- Removing {zip_path} ---")
+    logger.debug(f"--- Removing {zip_path} ---")
     os.remove(zip_path)
 
     return scandir(os.path.join(path2extract, dataset_name))
+
+
+def configure_logger(file_logging: bool=False, 
+                     logging_path: str="../log", 
+                     dataset_name: str="TRIANGLES") -> logging.Logger:
+    """Configure the logger and create the file"""
+    logger = logging.getLogger(name="fsgc-logger")
+    stream_handler = logging.StreamHandler(sys.stdout)
+
+    # Add the formatter
+    logger_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    stream_handler.setFormatter(logger_formatter)
+
+    # Add the stream handler
+    logger.addHandler(stream_handler)
+
+    # Set up the file handler if specified
+    if file_logging:
+        # check if <logging_path>/<dataset_name> dir exists or not
+        # if it does not exists then we must crete it
+        if not os.path.exists(os.path.join(logging_path, dataset_name)):
+            os.makedirs(os.path.join(logging_path, dataset_name))
+        
+        # Then we have to specify where to log
+        now_time = datetime.now()
+        logging_file_name = "{name}_{year}-{month}-{day}_{hour}-{minute}.log".format(
+            name=dataset_name, year=now_time.year, month=now_time.month, 
+            day=now_time.day, hour=now_time.hour, minute=now_time.minute
+        )
+        logging_file = os.path.join(os.path.join(logging_path, dataset_name), logging_file_name)
+
+        file_handler = logging.FileHandler(filename=logging_file)
+        file_handler.setFormatter(logger_formatter)
+        logger.addHandler(file_handler)
+
+    logger.setLevel(logging.DEBUG)
+
+    return logger

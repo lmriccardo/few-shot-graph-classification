@@ -1,5 +1,6 @@
 from typing import TypeVar
 import torch
+import os
 
 
 TRIANGLES_ZIP_URL = "https://cloud-storage.eu-central-1.linodeobjects.com/TRIANGLES.zip"
@@ -14,12 +15,18 @@ DATASETS = {
     "Letter-High" : LETTER_HIGH_ZIP_URL
 }
 
+DEFAULT_DATASET = "TRIANGLES"
+
 T = TypeVar('T')
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-DOWNLOAD_DATASET = True
-SAVE_PICLKE  = True
+DEVICE = "cpu"
+DOWNLOAD_DATASET = False
+SAVE_PICKLE  = True
 EDGELIMIT_PRINT = 2000
+SAVE_PRETRAINED = True
+FILE_LOGGING = True
+LOGGING_PATH = os.path.abspath("../log") if FILE_LOGGING else None
+DATA_PATH = os.path.abspath("../data") if not DOWNLOAD_DATASET else None
 
 NUM_FEATURES = {"TRIANGLES": 1, "R52": 1, "Letter-High": 2, "COIL-DEL": 2}
 NHID = 128

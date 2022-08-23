@@ -4,6 +4,7 @@ import torch_geometric.loader as gloader
 from typing import List, Generic, Optional
 from config import T
 from data.dataset import GraphDataset
+from data.sampler import TaskBatchSampler
 
 
 class GraphCollater(gloader.dataloader.Collater):
@@ -49,3 +50,22 @@ class FewShotDataLoader(torch.utils.data.DataLoader):
         for x in super().__iter__():
             support_batch, query_batch = self.batch_sampler.uncollate(x)
             yield support_batch, query_batch
+
+
+def get_dataloader(
+    ds: GraphDataset, n_way: int, k_shot: int, n_query: int, 
+    epoch_size: int, shuffle: bool, batch_size: int
+) -> FewShotDataLoader:
+    """Return a dataloader instance"""
+    return FewShotDataLoader(
+        dataset=ds,
+        batch_sampler=TaskBatchSampler(
+            dataset_targets=ds.targets(),
+            n_way=n_way,
+            k_shot=k_shot,
+            n_query=n_query,
+            epoch_size=epoch_size,
+            shuffle=shuffle,
+            batch_size=batch_size
+        )
+    )

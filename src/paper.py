@@ -49,6 +49,9 @@ class GraphDataset(data.Dataset):
         self.graph2nodes = self.train_set_data["graph2nodes"]
         self.graph2edges = self.train_set_data["graph2edges"]
 
+        if 1659 in self.graph2edges:
+            print(self.graph2edges[1659])
+
     def __getitem__(self, index):
         return self.graph_indicator[index]
 
@@ -56,7 +59,7 @@ class GraphDataset(data.Dataset):
         return len(self.label2graphs)
 
 
-class FewShotDataLoader:
+class FewShotDataLoaderPaper:
     def __init__(self,
                  dataset: GraphDataset,
                  n_way: int = 5,
@@ -118,6 +121,8 @@ class FewShotDataLoader:
         node_number = 0
         for index, gid in enumerate(graph_ids):
             nodes = self.dataset.graph2nodes[gid]
+            if (gid == 1659):
+                print(self.dataset.graph2edges[gid])
             new_nodes = list(range(node_number, node_number+len(nodes)))
             node_number = node_number+len(nodes)
             node2new_number = dict(zip(nodes, new_nodes))
@@ -141,6 +146,9 @@ class FewShotDataLoader:
         classes = self.sample_classes()
         support_graphs, query_graphs, support_labels, query_labels = self.sample_graphs_id(
             classes)
+        
+        print("Support Graph ID", support_graphs)
+        print("Query Graph ID", query_graphs)
 
         support_data = self.sample_graph_data(support_graphs)
         support_labels = torch.from_numpy(support_labels).long()
@@ -180,12 +188,31 @@ class FewShotDataLoader:
         return int(self.epoch_size / self.batch_size)
 
 
+def get_dataset(val: bool=False) -> GraphDataset:
+    return GraphDataset(val=val)
+
+
+def get_dataloader(
+    ds: GraphDataset, n_way: int, k_shot: int, n_query: int, 
+    epoch_size: int, batch_size: int
+) -> FewShotDataLoaderPaper:
+    return FewShotDataLoaderPaper(
+        dataset=ds,
+        n_way=n_way,
+        k_shot=k_shot,
+        n_query=n_query,
+        batch_size=batch_size,
+        num_workers=1,
+        epoch_size=epoch_size
+    )
+
+
 def main():
     # setup_seed()
 
     dataset = GraphDataset(val=False)
     val_dataset = GraphDataset(val=True)
-    train_loader = FewShotDataLoader(
+    train_loader = FewShotDataLoaderPaper(
         dataset=dataset,
         n_way=3,
         k_shot=10,
@@ -195,7 +222,7 @@ def main():
         epoch_size=200
     )
 
-    val_loader = FewShotDataLoader(
+    val_loader = FewShotDataLoaderPaper(
         dataset=val_dataset,
         n_way=3,
         k_shot=10,
