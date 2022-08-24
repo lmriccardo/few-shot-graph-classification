@@ -43,11 +43,6 @@ class AdaptiveStepMAML(nn.Module):
         self.graph_labels = []
         self.index = 1
 
-    def compute_loss(self, logits, label):
-        """Compute the CrossEntropyLoss"""
-        loss = self.loss(logits, label)
-        return loss
-
     def configure_optimizers(self):
         """Configure Optimizers"""
         return optim.Adam([
@@ -71,7 +66,7 @@ class AdaptiveStepMAML(nn.Module):
 
     def stop(self, step: int, loss: float, node_score: torch.Tensor):
         stop_hx = None
-        if config.FLEXIBLE_STEP and +step < config.MAX_STEP:
+        if config.FLEXIBLE_STEP and step < config.MAX_STEP:
             inputs = []
 
             if config.USE_LOSS:
