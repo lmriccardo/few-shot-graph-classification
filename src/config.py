@@ -27,6 +27,7 @@ SAVE_PRETRAINED = True
 FILE_LOGGING = True
 LOGGING_PATH = os.path.abspath("../log") if FILE_LOGGING else None
 DATA_PATH = os.path.abspath("../data") if not DOWNLOAD_DATASET else None
+MODELS_SAVE_PATH = "../models"
 
 NUM_FEATURES = {"TRIANGLES": 1, "R52": 1, "Letter-High": 2, "COIL-DEL": 2}
 NHID = 128
