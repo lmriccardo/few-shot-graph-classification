@@ -98,67 +98,18 @@ class TopKPooling(nn.Module):
             self.multiplier)
 
 
-# class SAGPool4MAML(SAGPooling):
-#     """SAGPooling for MAML. Change only the __repr__ method"""
-#     def __init__(self, in_channels: int, ratio: float=0.5,
-#                        GNN: nn.Module=GraphConv, min_score: Optional[float]=None,
-#                        multiplier: int=1, nonlinearity=torch.tanh, **kwargs) -> None:
-#         super().__init__(
-#             in_channels=in_channels, ratio=ratio,
-#             GNN=GNN, min_score=min_score, multiplier=multiplier,
-#             nonlinearity=nonlinearity, **kwargs
-#         )
+class SAGPool4MAML(SAGPooling):
+    """SAGPooling for MAML. Change only the __repr__ method"""
+    def __init__(self, in_channels: int, ratio: float=0.5,
+                       GNN: nn.Module=GraphConv, min_score: Optional[float]=None,
+                       multiplier: int=1, nonlinearity=torch.tanh, **kwargs) -> None:
+        super().__init__(
+            in_channels=in_channels, ratio=ratio,
+            GNN=GNN, min_score=min_score, multiplier=multiplier,
+            nonlinearity=nonlinearity, **kwargs
+        )
 
-#     def __repr__(self) -> str:
-#         return '{}({}, {}, {}={}, multiplier={})'.format(
-#             self.__class__.__name__, self.gnn.__class__.__name__,
-#             self.in_channels,
-#             'ratio' if self.min_score is None else 'min_score',
-#             self.ratio if self.min_score is None else self.min_score,
-#             self.multiplier)
-
-class SAGPool4MAML(torch.nn.Module):
-    def __init__(self, in_channels, ratio=0.5, GNN=GraphConv, min_score=None,
-                 multiplier=1, nonlinearity=torch.tanh, **kwargs):
-        super().__init__()
-
-        self.in_channels = in_channels
-        self.ratio = ratio
-        self.gnn = GNN(in_channels, 1, **kwargs)
-        self.min_score = min_score
-        self.multiplier = multiplier
-        self.nonlinearity = nonlinearity
-
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        self.gnn.reset_parameters()
-
-    def forward(self, x, edge_index, edge_attr=None, batch=None, attn=None):
-        """"""
-        if batch is None:
-            batch = edge_index.new_zeros(x.size(0))
-
-        attn = x if attn is None else attn
-        attn = attn.unsqueeze(-1) if attn.dim() == 1 else attn
-        score = self.gnn(attn, edge_index).view(-1)
-
-        if self.min_score is None:
-            score = self.nonlinearity(score)
-        else:
-            score = softmax(score, batch)
-
-        perm = topk(score, self.ratio, batch, self.min_score)
-        x = x[perm] * score[perm].view(-1, 1)
-        x = self.multiplier * x if self.multiplier != 1 else x
-
-        batch = batch[perm]
-        edge_index, edge_attr = filter_adj(edge_index, edge_attr, perm,
-                                           num_nodes=score.size(0))
-
-        return x, edge_index, edge_attr, batch, perm, score[perm]
-
-    def __repr__(self):
+    def __repr__(self) -> str:
         return '{}({}, {}, {}={}, multiplier={})'.format(
             self.__class__.__name__, self.gnn.__class__.__name__,
             self.in_channels,
