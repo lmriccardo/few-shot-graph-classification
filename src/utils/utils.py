@@ -1,8 +1,9 @@
+from email.generator import Generator
 import pickle
 import networkx as nx
 import numpy as np
 import plotly.graph_objects as go
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import config
 import os
 import shutil
@@ -764,3 +765,13 @@ def configure_logger(file_logging: bool=False,
     logger.setLevel(logging.DEBUG)
 
     return logger
+
+
+def cartesian_product(x: Sequence, y: Optional[Sequence]=None) -> Generator:
+    """Return the cartesian product between two sequences"""
+    if y is None:
+        y = x
+
+    for el_x in x:
+        for el_y in y:
+            yield (el_x, el_y)

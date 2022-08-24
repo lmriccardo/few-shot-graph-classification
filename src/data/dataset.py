@@ -1,13 +1,16 @@
 import torch
 import torch_geometric.data as gdata
 
-from utils.utils import download_zipped_data, load_with_pickle
+from utils.utils import download_zipped_data, load_with_pickle, cartesian_product
 import config
 
 import networkx as nx
 from typing import Any, Dict, List, Optional, Tuple, Union
+from copy import deepcopy
 import logging
 import os
+import random
+import math
 
 
 class GraphDataset(gdata.Dataset):
@@ -93,6 +96,8 @@ class GraphDataset(gdata.Dataset):
         y = torch.tensor([int(label)], dtype=torch.int)
 
         return gdata.Data(x=x, edge_index=edge_index, y=y)
+    
+    # TODO: custom __add__ and __iadd__ to extend the dataset
 
 
 def get_all_labels(graphs: Dict[str, Tuple[nx.Graph, str]]) -> torch.Tensor:
@@ -157,3 +162,54 @@ def get_dataset(logger: logging.Logger,
         logger=logger
     )
     return train_ds, test_ds, val_ds, data_dir
+
+
+####################################################################################
+############################### ML-EVOLVE UTILITIES ################################
+####################################################################################
+
+def random_mapping_heuristic(graphs: GraphDataset) -> List[Tuple[nx.Graph, str]]:
+    """
+    Random mapping is the first baseline heuristics used in the
+    ML-EVOLVE graph data augmentation technique, shown in the 
+    https://dl.acm.org/doi/pdf/10.1145/3340531.3412086 paper by Zhou et al.
+
+    The idea is the followind (for a single graph): we have to create E_cdel 
+    and E_cadd. First of all they set E_cdel = E (i.e., the entire set of 
+    existing edges) and E_cadd = all non existing edges. Then to construct
+    E_add and E_del they sample from the respective set.
+
+            E_add = random.sample(E_cadd, size=ceil(m * beta)) and
+            E_del = random.sample(E_cdel, size=ceil(m * beta))
+
+    where m = |E| and beta is a number setted to 0.15 in the paper.
+
+    :param graphs: the entire dataset of graphs
+    :return: the new graph G' = (V, (E + E_add) - E_del)
+    """
+    new_graphs = []
+    
+    # Iterate over all graphs
+    for _, ds_element in graphs.graphs_ds.items():
+        current_graph, label = ds_element
+
+        # Takes all edges
+        e_cdel = current_graph.edges()
+
+        # Takes every pair of nodes that is not an edge
+        e_cadd = []
+        for node_x, node_y in cartesian_product(current_graph.nodes()):
+            if node_x != node_y and (node_x, node_y) not in e_cdel:
+                e_cadd.append((node_x, node_y))
+        
+        # Then we have to sample
+        e_add = random.sample(e_cadd, k=math.ceil(current_graph.number_of_edges() * config.BETA))
+        e_del = random.sample(e_cdel, k=math.ceil(current_graph.number_of_edges() * config.BETA))
+
+        # Let's do a deepcopy to not modify the original graph
+        g = deepcopy(current_graph)
+        g.remove_edges_from(e_del)
+        g.add_edges_from(e_add)
+        new_graphs.append((g, label))
+    
+    return new_graphs

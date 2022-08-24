@@ -24,7 +24,7 @@ DOWNLOAD_DATASET = False
 SAVE_PICKLE  = True
 EDGELIMIT_PRINT = 2000
 SAVE_PRETRAINED = True
-FILE_LOGGING = True
+FILE_LOGGING = False
 LOGGING_PATH = os.path.abspath("../log") if FILE_LOGGING else None
 DATA_PATH = os.path.abspath("../data") if not DOWNLOAD_DATASET else None
 MODELS_SAVE_PATH = "../models"
@@ -66,3 +66,10 @@ GRAD_CLIP          = 5
 # Stop Control configurations
 STOP_CONTROL_INPUT_SIZE = 2
 STOP_CONTROL_HIDDEN_SIZE = 20
+
+
+########################################################################################
+############################### ML-EVOLVE CONFIGURATION ################################
+########################################################################################
+
+BETA = 0.15

@@ -4,7 +4,7 @@ sys.path.append(os.getcwd())
 
 from torch_geometric.data import Data
 
-from data.dataset import get_dataset, GraphDataset
+from data.dataset import get_dataset, GraphDataset, random_mapping_heuristic
 from data.dataloader import get_dataloader, FewShotDataLoader
 from utils.utils import (
     setup_seed, elapsed_time, get_max_acc, configure_logger
@@ -362,5 +362,20 @@ def main():
     # delete_data_folder(data_dir)
 
 
+def func() -> None:
+    logger = configure_logger(file_logging=config.FILE_LOGGING, logging_path=config.LOGGING_PATH)
+
+    dataset_name = config.DEFAULT_DATASET
+    train_ds, _, _, _ = get_dataset(
+        download=config.DOWNLOAD_DATASET, 
+        data_dir=config.DATA_PATH, 
+        logger=logger,
+        dataset_name=dataset_name
+    )
+
+    print(random_mapping_heuristic(train_ds))
+
+
 if __name__ == "__main__":
-    main()
+    # main()
+    func()
