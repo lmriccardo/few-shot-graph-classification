@@ -30,6 +30,11 @@ DATA_PATH = os.path.abspath("../data") if not DOWNLOAD_DATASET else None
 MODELS_SAVE_PATH = "../models"
 
 NUM_FEATURES = {"TRIANGLES": 1, "R52": 1, "Letter-High": 2, "COIL-DEL": 2}
+
+########################################################################################
+############################### AS-MAML CONFIGURATION ##################################
+########################################################################################
+
 NHID = 128
 POOLING_RATIO = 0.5
 DROPOUT_RATIO = 0.3
@@ -48,8 +53,6 @@ USE_SCORE     = True
 USE_GRAD      = False
 USE_LOSS      = True
 
-# Episodes: How many tasks to run
-
 TRAIN_SHOT         = 10   # K-shot for training set
 VAL_SHOT           = 10   # K-shot for validation (or test) set
 TRAIN_QUERY        = 15   # Number of query for the training set
@@ -63,7 +66,6 @@ EPOCHS             = 500  # How many epochs
 PATIENCE           = 35
 GRAD_CLIP          = 5
 
-# Stop Control configurations
 STOP_CONTROL_INPUT_SIZE = 2
 STOP_CONTROL_HIDDEN_SIZE = 20
 
@@ -72,4 +74,6 @@ STOP_CONTROL_HIDDEN_SIZE = 20
 ############################### ML-EVOLVE CONFIGURATION ################################
 ########################################################################################
 
-BETA = 0.15
+BETA       = 0.15
+N_FOLD     = 5     # For nCross Fold Validation
+ITERATIONS = 5
