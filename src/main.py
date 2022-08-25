@@ -1,10 +1,11 @@
 import sys
 import os
+
 sys.path.append(os.getcwd())
 
 from torch_geometric.data import Data
 
-from data.dataset import get_dataset, GraphDataset, random_mapping_heuristic
+from data.dataset import get_dataset, GraphDataset, motif_similarity_mapping_heuristic
 from data.dataloader import get_dataloader, FewShotDataLoader
 from utils.utils import (
     setup_seed, elapsed_time, get_max_acc, configure_logger
@@ -363,6 +364,8 @@ def main():
 
 
 def func() -> None:
+    from utils.utils import plot_graph
+
     logger = configure_logger(file_logging=config.FILE_LOGGING, logging_path=config.LOGGING_PATH)
 
     dataset_name = config.DEFAULT_DATASET
@@ -373,7 +376,9 @@ def func() -> None:
         dataset_name=dataset_name
     )
 
-    print(random_mapping_heuristic(train_ds))
+    graphs = motif_similarity_mapping_heuristic(train_ds)
+    plot_graph(graphs[0][0], "name")
+    plot_graph(train_ds.graphs_ds[list(train_ds.graphs_ds.keys())[0]][0], "grafo")
 
 
 if __name__ == "__main__":

@@ -4,13 +4,19 @@ import torch_geometric.data as gdata
 from utils.utils import download_zipped_data, load_with_pickle, cartesian_product
 import config
 
-import networkx as nx
+from networkx.algorithms.link_prediction import resource_allocation_index
+from networkx.algorithms.triads import all_triads
 from typing import Any, Dict, List, Optional, Tuple, Union
 from copy import deepcopy
+from numpy.linalg import matrix_power
+
+import networkx as nx
 import logging
 import os
 import random
 import math
+import numpy as np
+import numpy.random as np_random
 
 
 class GraphDataset(gdata.Dataset):
@@ -207,6 +213,143 @@ def random_mapping_heuristic(graphs: GraphDataset) -> List[Tuple[nx.Graph, str]]
         e_del = random.sample(e_cdel, k=math.ceil(current_graph.number_of_edges() * config.BETA))
 
         # Let's do a deepcopy to not modify the original graph
+        g = deepcopy(current_graph)
+        g.remove_edges_from(e_del)
+        g.add_edges_from(e_add)
+        new_graphs.append((g, label))
+    
+    return new_graphs
+
+
+def motif_similarity_mapping_heuristic(graphs: GraphDataset) -> List[Tuple[nx.Graph, str]]:
+    """
+    Motif-similarity mapping is the second heuristics for new 
+    data generation, presented in https://dl.acm.org/doi/pdf/10.1145/3340531.3412086 
+    paper by Zhou et al. The idea is based on the concept of graph motifs: 
+    sub-graphs that repeat themselves in a specific graph or even among various
+    graphs. Each of these sub-graphs, defined by a particular pattern of
+    interactions between vertices, may describe a framework in which particular
+    functions are achieved efficiently.
+
+    In this case they consider the so-called open-triad, equivalent to a lenght-2
+    paths emanating from the head vertex v that induce a triangle. That is, an
+    open-triad is for instance a sub-graph composed of three vertices v1, v2, v3
+    and this edges (v1, v2) and (v1, v3). This induce a triangle since we can swap
+    edges like (v1, v2) becomes (v2, v3) or (v1, v3) becomes (v3, v2). 
+
+    This is the base idea: for all open-triad with vertex head v and tail u we
+    construct E_cadd = {(v, u) | A(u,v)=0 and A^2(u,v)=0 and v != u} where
+    A(u,v) is the value of the adjacency matrix for the edge (v,u). Then to construct
+    E_add we do a weighted random sampling from E_cadd, where the weight depends on
+    an index called the Resource Allocation Index (The formula can be found in the
+    'networkx' python module under networkx.algorithms.link_prediction.resource_allocation_index).
+    Similarly, we compute the deletation probability as w_del = 1 - w_add, and finally
+    for each open-triad involving (v, u) we weighted random sample edges to remove.
+    This removed edges will construct the E_del set.
+
+    You can have a better look of the algorithm (Algorithm 1) in this paper
+    https://arxiv.org/pdf/2007.05700.pdf (by Zhou et al)
+
+
+    :param graphs: the dataset with all graphs
+    :return: the new graph G' = (V, (E + E_add) - E_del)
+    """
+    new_graphs = []
+
+    # Iterate over all graphs
+    for _, ds_element in graphs.graphs_ds.items():
+        current_graph, label = ds_element
+
+        # First of all let's define a mapping from graph's nodes and
+        # their indexes in the adjacency matrix, so also for a the reverse mapping
+        node_mapping = dict(zip(current_graph.nodes(), range(current_graph.number_of_nodes())))
+        reverse_node_mapping = {v : k for k, v in node_mapping.items()}
+
+        # Then we need the adjancency matrix and its squared power
+        # Recall that the square power of A, A^2, contains for all
+        # (i, j): A[i,j] = deg(i) if i = j, otherwise it shows if
+        # there exists a path of lenght 2 that connect i with j. In
+        # this case the value of the cell is A[i,j] = 1, 0 otherwise.
+        adj_matrix = nx.adjacency_matrix(current_graph).todense()
+        power_2_adjancency = matrix_power(adj_matrix, 2)
+        
+        # The first step of the algorithm is to compute E_cadd
+        e_cadd = []
+        for node_x, node_y in cartesian_product(current_graph.nodes()):
+
+            # mapping is needed to index the adjancency matrix
+            node_x, node_y = node_mapping[node_x], node_mapping[node_y]
+
+            # In this case, what we wanna find are all that edges that
+            # does not exists in the graph, but if they would exists than
+            # no open-triad could be present inside the graph.
+            if adj_matrix[node_x,node_y] == 0 and power_2_adjancency[node_x,node_y] != 0 \
+                and node_x != node_y and (node_y, node_x) not in e_cadd:
+                e_cadd.append((reverse_node_mapping[node_x], reverse_node_mapping[node_y]))
+
+        possible_triads = dict()
+        rai_dict = dict()
+        total_rai_no_edges = 0.0
+
+        # In this step, we search for all edges inside E_cadd
+        # the other two edges that constitute the triad. The search
+        # look only for the first pair, no furthermore. 
+        # Here we can also compute the Resource Allocation Index.
+        for (node_x, node_y) in e_cadd:
+            node_x, node_y = node_mapping[node_x], node_mapping[node_y]
+            for node in current_graph.nodes():
+                node = node_mapping[node]
+                if adj_matrix[node_x, node] + adj_matrix[node, node_y] == 2:
+                    node_x = reverse_node_mapping[node_x]
+                    node = reverse_node_mapping[node]
+                    node_y = reverse_node_mapping[node_y]
+                    possible_triads[(node_x, node_y)] = [(node_x, node), (node, node_y)]
+                    break
+
+            rai = resource_allocation_index(current_graph, [(node_x, node_y)])
+            _, _, rai = next(iter(rai))
+            rai_dict[(node_x, node_y)] = rai
+            total_rai_no_edges += rai
+
+            edges = possible_triads[(node_x, node_y)]
+            for u, v, p in resource_allocation_index(current_graph, edges):
+                if (u, v) not in rai_dict:
+                    rai_dict[(u, v)] = p
+
+        # In this step of the algorithm, we have to construct the W_add set.
+        # Then, we can sample some edges from E_cadd and construct E_add.
+        w_add = dict()
+        for (node_x, node_y) in rai_dict:
+            if (node_x, node_y) in e_cadd:
+                w_add[(node_x, node_y)] = rai_dict[(node_x, node_y)] / total_rai_no_edges
+
+        e_add_sample_number = math.ceil(current_graph.number_of_edges() * config.BETA)
+
+        idxs = list(range(0, len(e_cadd)))
+        p_distribution = list(w_add.values())
+
+        choices = np_random.choice(idxs, size=e_add_sample_number, p=p_distribution, replace=False)
+        e_add = np.array(e_cadd)[choices].tolist()
+        e_add = list(map(tuple, e_add))
+
+        # Finally, the second to the last step is to fill the E_del set.
+        # In this step we compute the deletation weights, only for those
+        # edges that belongs to the same triad of the previously chosen
+        # edges. Essentially, those edges that belongs to E_add
+        e_del = []
+        for edge in e_add:
+            left, right = possible_triads[edge]
+            if (left, right) in e_del:
+                continue
+
+            w_del_left = 1 - rai_dict[left] / total_rai_no_edges
+            w_del_right = 1 - rai_dict[right] / total_rai_no_edges
+            p_distribution = [w_del_left, w_del_right]
+            ch = random.choices([left, right], k=1, weights=p_distribution)[0]
+
+            e_del.append(ch)
+
+        # The last step is to construct the new graph
         g = deepcopy(current_graph)
         g.remove_edges_from(e_del)
         g.add_edges_from(e_add)
