@@ -84,7 +84,9 @@ def func() -> None:
         dataset_name=dataset_name
     )
 
-    graphs = motif_similarity_mapping_heuristic(train_ds)
+    print(train_ds.count_per_class)
+
+    # graphs = motif_similarity_mapping_heuristic(train_ds)
 
 
 if __name__ == "__main__":

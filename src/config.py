@@ -77,3 +77,4 @@ STOP_CONTROL_HIDDEN_SIZE = 20
 BETA       = 0.15
 N_FOLD     = 5     # For nCross Fold Validation
 ITERATIONS = 5
+HEURISTIC  = "random_mapping"

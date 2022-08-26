@@ -4,11 +4,11 @@ import torch_geometric.data as gdata
 from utils.utils import download_zipped_data, load_with_pickle, cartesian_product
 import config
 
-from networkx.algorithms.link_prediction import resource_allocation_index
-from networkx.algorithms.triads import all_triads
 from typing import Any, Dict, List, Optional, Tuple, Union
+from networkx.algorithms.link_prediction import resource_allocation_index
 from copy import deepcopy
 from numpy.linalg import matrix_power
+from collections import defaultdict
 
 import networkx as nx
 import logging
@@ -23,6 +23,7 @@ class GraphDataset(gdata.Dataset):
     def __init__(self, graphs_ds: Dict[str, Tuple[nx.Graph, str]]) -> None:
         super(GraphDataset, self).__init__()
         self.graphs_ds = graphs_ds
+        self.count_per_class = dict()
 
     @classmethod
     def get_dataset(cls, attributes: List[Any], data: Dict[str, Any]) -> 'GraphDataset':
@@ -40,6 +41,8 @@ class GraphDataset(gdata.Dataset):
         graph2nodes  = data["graph2nodes"]
         graph2edges  = data["graph2edges"]
 
+        count_per_class = defaultdict(int)
+
         for label, graph_list in label2graphs.items():
             for graph_id in graph_list:
                 graph_nodes = graph2nodes[graph_id]
@@ -55,10 +58,13 @@ class GraphDataset(gdata.Dataset):
                 g.add_nodes_from(nodes)
             
                 graphs[graph_id] = (g, label)
+            
+            count_per_class[label] += len(graph_list)
 
         graphs = dict(sorted(graphs.items(), key=lambda x: x[0]))
         graph_dataset = super(GraphDataset, cls).__new__(cls)
         graph_dataset.__init__(graphs)
+        graph_dataset.count_per_class = count_per_class
 
         return graph_dataset
 
@@ -170,9 +176,9 @@ def get_dataset(logger: logging.Logger,
     return train_ds, test_ds, val_ds, data_dir
 
 
-####################################################################################
-############################### ML-EVOLVE UTILITIES ################################
-####################################################################################
+#####################################################################################
+############################### ML-EVOLVE HEURISTICS ################################
+#####################################################################################
 
 def random_mapping_heuristic(graphs: GraphDataset) -> List[Tuple[nx.Graph, str]]:
     """
