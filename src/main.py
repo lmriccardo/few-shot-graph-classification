@@ -90,5 +90,5 @@ def func() -> None:
 
 
 if __name__ == "__main__":
-    # main()
-    func()
+    main()
+    # func()

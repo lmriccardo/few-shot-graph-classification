@@ -63,7 +63,7 @@ class Tester:
         query_data = query_data.pin_memory()
         query_data = query_data.to(config.DEVICE)
 
-        accs, step, _, _, query_losses = self.meta_model.finetunning(support_data, query_data)
+        accs, step, _, _, query_losses = self.meta_model.finetuning(support_data, query_data)
 
         val_accs.append(accs[step])
         query_losses_list.extend(query_losses)
@@ -87,7 +87,7 @@ class Tester:
         test_dl = self.get_dataloader()
 
         print("=" * 40 + " Starting Testing " + "=" * 40)
-        self.logger.debug("Starting Testint")
+        self.logger.debug("Starting Testing")
 
         val_accs = []
         query_losses_list = []
