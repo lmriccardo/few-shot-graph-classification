@@ -775,3 +775,23 @@ def cartesian_product(x: Sequence, y: Optional[Sequence]=None) -> Generator:
     for el_x in x:
         for el_y in y:
             yield (el_x, el_y)
+
+
+def graph2data(graph: nx.Graph, target: str | int) -> gdata.Data:
+    """From a networkx.Graph returns a torch_geometric.data.Data"""
+    graph = graph.to_directed()
+
+    # Retrieve nodes attributes
+    attrs = list(graph.nodes(data=True))
+    x = torch.tensor([list(map(int, a.values())) for _, a in attrs], dtype=torch.float)
+
+    # Retrieve edges
+    edge_index = torch.tensor([list(e) for e in graph.edges], dtype=torch.long) \
+                        .t()                                                  \
+                        .contiguous()                                         \
+                        .long()
+
+    # Retrieve ground trouth labels
+    y = torch.tensor([int(target)], dtype=torch.int)
+
+    return gdata.Data(x=x, edge_index=edge_index, y=y)

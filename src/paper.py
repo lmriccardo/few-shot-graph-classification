@@ -5,8 +5,6 @@ import pickle
 import torch.utils.data as data
 import torch
 
-from main import run_train
-
 
 def setup_seed(seed=42):
     random.seed(seed)
@@ -17,9 +15,9 @@ def setup_seed(seed=42):
 
 
 class GraphDataset(data.Dataset):
-    node_attribute_file = "../data/TRIANGLES/TRIANGLES_node_attributes.pickle"
-    train_set_file = "../data/TRIANGLES/TRIANGLES_train_set.pickle"
-    val_set_file = "../data/TRIANGLES/TRIANGLES_val_set.pickle"
+    node_attribute_file = "../data/COIL-DEL/COIL-DEL_node_attributes.pickle"
+    train_set_file = "../data/COIL-DEL/COIL-DEL_train_set.pickle"
+    val_set_file = "../data/COIL-DEL/COIL-DEL_val_set.pickle"
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__()
@@ -29,9 +27,9 @@ class GraphDataset(data.Dataset):
         self.train_set_data = dict()
 
         with open(self.node_attribute_file, mode="rb") as iostream:
-            self.node_attribute_data = pickle.load(iostream)
-            self.node_attribute_data = list(
-                map(float, self.node_attribute_data))
+            self.node_attribute_data = pickle.load(iostream).tolist()
+            #self.node_attribute_data = list(
+            #    map(float, self.node_attribute_data))
 
         if not kwargs["val"]:
             with open(self.train_set_file, mode="rb") as iostream:
@@ -48,9 +46,6 @@ class GraphDataset(data.Dataset):
         self.label2graphs = self.train_set_data["label2graphs"]
         self.graph2nodes = self.train_set_data["graph2nodes"]
         self.graph2edges = self.train_set_data["graph2edges"]
-
-        if 1659 in self.graph2edges:
-            print(self.graph2edges[1659])
 
     def __getitem__(self, index):
         return self.graph_indicator[index]
@@ -121,8 +116,6 @@ class FewShotDataLoaderPaper:
         node_number = 0
         for index, gid in enumerate(graph_ids):
             nodes = self.dataset.graph2nodes[gid]
-            if (gid == 1659):
-                print(self.dataset.graph2edges[gid])
             new_nodes = list(range(node_number, node_number+len(nodes)))
             node_number = node_number+len(nodes)
             node2new_number = dict(zip(nodes, new_nodes))
@@ -146,9 +139,6 @@ class FewShotDataLoaderPaper:
         classes = self.sample_classes()
         support_graphs, query_graphs, support_labels, query_labels = self.sample_graphs_id(
             classes)
-        
-        print("Support Graph ID", support_graphs)
-        print("Query Graph ID", query_graphs)
 
         support_data = self.sample_graph_data(support_graphs)
         support_labels = torch.from_numpy(support_labels).long()
@@ -205,34 +195,3 @@ def get_dataloader(
         num_workers=1,
         epoch_size=epoch_size
     )
-
-
-def main():
-    # setup_seed()
-
-    dataset = GraphDataset(val=False)
-    val_dataset = GraphDataset(val=True)
-    train_loader = FewShotDataLoaderPaper(
-        dataset=dataset,
-        n_way=3,
-        k_shot=10,
-        n_query=15,
-        batch_size=1,
-        num_workers=4,
-        epoch_size=200
-    )
-
-    val_loader = FewShotDataLoaderPaper(
-        dataset=val_dataset,
-        n_way=3,
-        k_shot=10,
-        n_query=15,
-        batch_size=1,
-        num_workers=4,
-        epoch_size=200
-    )
-
-    run_train(train_dl=train_loader(0), val_dl=val_loader(0), paper=True)
-
-if __name__ == "__main__":
-    main()

@@ -1,7 +1,7 @@
 import torch
 import torch_geometric.data as gdata
 
-from utils.utils import download_zipped_data, load_with_pickle, cartesian_product
+from utils.utils import download_zipped_data, load_with_pickle, cartesian_product, graph2data
 import config
 
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -26,13 +26,14 @@ class GraphDataset(gdata.Dataset):
         self.count_per_class = dict()
 
     @classmethod
-    def get_dataset(cls, attributes: List[Any], data: Dict[str, Any]) -> 'GraphDataset':
+    def get_dataset(cls, attributes: List[Any], data: Dict[str, Any], num_features: int=1) -> 'GraphDataset':
         """
         Returns a new instance of GraphDataset filled with graphs inside data. 'attributes'
         is the list with all the attributes (not only those beloging to nodes in 'data').
 
         :param data: a dictionary with label2graphs, graph2nodes and graph2edges
         :param attributes: a list with node attributes
+        :param num_features: the number of features of a node
         :return: a new instance of GraphDataset
         """
         graphs = dict()
@@ -47,7 +48,14 @@ class GraphDataset(gdata.Dataset):
             for graph_id in graph_list:
                 graph_nodes = graph2nodes[graph_id]
                 graph_edges = graph2edges[graph_id]
-                nodes_attributes = [[attributes[node_id]] for node_id in graph_nodes]
+                nodes_attributes = []
+                for node_id in graph_nodes:
+                    attribute = attributes[node_id]
+                    if num_features == 1:
+                        attribute = [attribute]
+                    
+                    nodes_attributes.append(attribute)
+                    
                 nodes = []
                 for node, attribute in zip(graph_nodes, nodes_attributes):
                     nodes.append((node, {f"attr{i}" : a for i, a in enumerate(attribute)}))
@@ -92,22 +100,11 @@ class GraphDataset(gdata.Dataset):
             idx = int(idx)
 
         graph = self.graphs_ds[idx]
-        g, label = graph[0].to_directed(), graph[1]
+        g, label = graph[0], graph[1]
 
-        # Retrieve nodes attributes
-        attrs = list(g.nodes(data=True))
-        x = torch.tensor([list(map(int, a.values())) for _, a in attrs], dtype=torch.float)
+        data = graph2data(g, label)
 
-        # Retrieve edges
-        edge_index = torch.tensor([list(e) for e in g.edges], dtype=torch.long) \
-                          .t()                                                  \
-                          .contiguous()                                         \
-                          .long()
-
-        # Retrieve ground trouth labels
-        y = torch.tensor([int(label)], dtype=torch.int)
-
-        return gdata.Data(x=x, edge_index=edge_index, y=y)
+        return data
     
     # TODO: custom __add__ and __iadd__ to extend the dataset
 
@@ -149,13 +146,16 @@ def generate_train_val_test(dataset_name: str,
         data_dir = "\\".join(node_attribute.replace("\\", "/").split("/")[:-2])
 
     node_attribute_data = load_with_pickle(node_attribute)
+    if isinstance(node_attribute_data, np.ndarray | torch.Tensor):
+        node_attribute_data = node_attribute_data.tolist()
+
     test_data = load_with_pickle(test_file)
     train_data = load_with_pickle(train_file)
     val_data = load_with_pickle(val_file)
 
-    train_ds = GraphDataset.get_dataset(node_attribute_data, train_data)
-    test_ds  = GraphDataset.get_dataset(node_attribute_data,  test_data)
-    val_ds   = GraphDataset.get_dataset(node_attribute_data,   val_data)
+    train_ds = GraphDataset.get_dataset(node_attribute_data, train_data, num_features=config.NUM_FEATURES[dataset_name])
+    test_ds  = GraphDataset.get_dataset(node_attribute_data,  test_data, num_features=config.NUM_FEATURES[dataset_name])
+    val_ds   = GraphDataset.get_dataset(node_attribute_data,   val_data, num_features=config.NUM_FEATURES[dataset_name])
 
     return train_ds, test_ds, val_ds, data_dir
 

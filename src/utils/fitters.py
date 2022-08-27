@@ -36,13 +36,19 @@ class Optimizer:
         self.epochs = epochs
         self.dataset_name = dataset_name
 
+        if self.paper:
+            self.train_dl, self.val_dl = None, None
+        else:
+            self.train_dl, self.val_dl = self.get_dataloaders()
+            
         self.model = self.get_model()
         self.meta_model = self.get_meta()
     
     def get_model(self) -> Union[GCN4MAML, SAGE4MAML]:
         """Return the model to use with the MetaModel"""
         models = {'sage': SAGE4MAML, 'gcn': GCN4MAML}
-        model = models[self.model_name](num_classes=config.TRAIN_WAY, paper=self.paper).to(config.DEVICE)
+        model = models[self.model_name](num_classes=config.TRAIN_WAY, paper=self.paper,
+                                        num_features=config.NUM_FEATURES[self.dataset_name]).to(config.DEVICE)
         self.logger.debug(f"Creating model of type {model.__class__.__name__}")
         return model
 
@@ -80,11 +86,11 @@ class Optimizer:
     ) -> None:
         """Run one episode, i.e. one or more tasks, of training"""
         # Set support and query data to the GPU
-        support_data = support_data.pin_memory()
-        support_data = support_data.to(config.DEVICE)
+        # support_data = support_data.pin_memory()
+        # support_data = support_data.to(config.DEVICE)
 
-        query_data = query_data.pin_memory()
-        query_data = query_data.to(config.DEVICE)
+        # query_data = query_data.pin_memory()
+        # query_data = query_data.to(config.DEVICE)
 
         accs, step, final_loss, total_loss, _, _, _, _ = self.meta_model(
             support_data, query_data
@@ -104,11 +110,11 @@ class Optimizer:
                                       val_accs: List[float], 
                                       loop_counter: int) -> None:
         """Run one episode, i.e. one or more tasks, of validation"""
-        support_data = support_data.pin_memory()
-        support_data = support_data.to(config.DEVICE)
+        # support_data = support_data.pin_memory()
+        # support_data = support_data.to(config.DEVICE)
 
-        query_data = query_data.pin_memory()
-        query_data = query_data.to(config.DEVICE)
+        # query_data = query_data.pin_memory()
+        # query_data = query_data.to(config.DEVICE)
         
         accs, step, _, scores, query_losses = self.meta_model.finetuning(support_data, query_data)
         acc = get_max_acc(accs, step, scores, config.MIN_STEP, config.MAX_STEP)
@@ -126,7 +132,6 @@ class Optimizer:
     @elapsed_time
     def optimize(self):
         """Run the optimization (fitting)"""
-        train_dl, val_dl = self.get_dataloaders()
         max_val_acc = 0
         print("=" * 40 + " Starting Optimization " + "=" * 40)
         self.logger.debug("Starting Optimization")
@@ -144,7 +149,7 @@ class Optimizer:
 
             self.logger.debug("Training Phase")
 
-            for i, data in enumerate(tqdm(train_dl)):
+            for i, data in enumerate(tqdm(self.train_dl)):
                 support_data, query_data = data
                 self.run_one_step_train(
                     support_data=support_data, query_data=query_data,
@@ -156,7 +161,7 @@ class Optimizer:
             self.logger.debug("Validation Phase")
 
             self.meta_model.eval()
-            for i, data in enumerate(tqdm(val_dl)):
+            for i, data in enumerate(tqdm(self.val_dl)):
                 support_data, query_data = data
                 self.run_one_step_validation(
                     support_data=support_data, query_data=query_data,

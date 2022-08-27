@@ -8,6 +8,7 @@ from utils.utils import configure_logger
 from utils.fitters import Optimizer
 from utils.testers import Tester
 
+import paper
 import config
 import torch
 
@@ -73,6 +74,37 @@ def main():
     # delete_data_folder(data_dir)
 
 
+def run_paper() -> None:
+    logger = configure_logger(file_logging=config.FILE_LOGGING, logging_path=config.LOGGING_PATH)
+    dataset = paper.GraphDataset(val=False)
+    val_dataset = paper.GraphDataset(val=True)
+    train_loader = paper.FewShotDataLoaderPaper(
+        dataset=dataset,
+        n_way=3,
+        k_shot=10,
+        n_query=15,
+        batch_size=1,
+        num_workers=4,
+        epoch_size=200
+    )
+
+    val_loader = paper.FewShotDataLoaderPaper(
+        dataset=val_dataset,
+        n_way=3,
+        k_shot=10,
+        n_query=15,
+        batch_size=1,
+        num_workers=4,
+        epoch_size=200
+    )
+
+    optimizer = Optimizer(dataset, val_dataset, logger, epochs=config.EPOCHS, dataset_name=config.DEFAULT_DATASET, paper=True)
+    optimizer.train_dl = train_loader(0)
+    optimizer.val_dl   = val_loader(0)
+
+    optimizer.optimize()
+
+
 def func() -> None:
     logger = configure_logger(file_logging=config.FILE_LOGGING, logging_path=config.LOGGING_PATH)
 
@@ -90,5 +122,6 @@ def func() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    # main()
+    run_paper()
     # func()

@@ -1,5 +1,4 @@
 from typing import TypeVar
-import torch
 import os
 
 
@@ -15,7 +14,7 @@ DATASETS = {
     "Letter-High" : LETTER_HIGH_ZIP_URL
 }
 
-DEFAULT_DATASET = "TRIANGLES"
+DEFAULT_DATASET = "COIL-DEL"
 
 T = TypeVar('T')
 
@@ -78,3 +77,7 @@ BETA       = 0.15
 N_FOLD     = 5     # For nCross Fold Validation
 ITERATIONS = 5
 HEURISTIC  = "random_mapping"
+
+LABEL_REL_THRESHOLD_STEPS = 1000
+LABEL_REL_THRESHOLD_BETA  = 30
+LABEL_REL_THRESHOLD_STEP_SIZE = 1E-02
