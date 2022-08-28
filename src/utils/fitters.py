@@ -86,11 +86,12 @@ class Optimizer:
     ) -> None:
         """Run one episode, i.e. one or more tasks, of training"""
         # Set support and query data to the GPU
-        # support_data = support_data.pin_memory()
-        # support_data = support_data.to(config.DEVICE)
+        if config.DEVICE != "cpu":
+            support_data = support_data.pin_memory()
+            support_data = support_data.to(config.DEVICE)
 
-        # query_data = query_data.pin_memory()
-        # query_data = query_data.to(config.DEVICE)
+            query_data = query_data.pin_memory()
+            query_data = query_data.to(config.DEVICE)
 
         accs, step, final_loss, total_loss, _, _, _, _ = self.meta_model(
             support_data, query_data
@@ -110,24 +111,17 @@ class Optimizer:
                                       val_accs: List[float], 
                                       loop_counter: int) -> None:
         """Run one episode, i.e. one or more tasks, of validation"""
-        # support_data = support_data.pin_memory()
-        # support_data = support_data.to(config.DEVICE)
+        if config.DEVICE != "cpu":
+            support_data = support_data.pin_memory()
+            support_data = support_data.to(config.DEVICE)
 
-        # query_data = query_data.pin_memory()
-        # query_data = query_data.to(config.DEVICE)
+            query_data = query_data.pin_memory()
+            query_data = query_data.to(config.DEVICE)
         
         accs, step, _, scores, query_losses = self.meta_model.finetuning(support_data, query_data)
         acc = get_max_acc(accs, step, scores, config.MIN_STEP, config.MAX_STEP)
 
         val_accs.append(accs[step])
-        if (loop_counter + 1) % 50 == 0:
-            printable_string = f"Test Number {loop_counter + 1}\n" + \
-                                "\tQuery Losses[{l}]: {query_losses}\n\tAccuracies {step}: {accs}\n\tMax Accuracy: {max_acc}\n".format(
-                                    l=len(query_losses), query_losses=query_losses, step=step,
-                                    accs=np.array([accs[i] for i in range(0, step + 1)]), max_acc=acc
-                                )
-
-            print(printable_string, file=sys.stdout if not config.FILE_LOGGING else open(self.logger.handlers[1].baseFilename, mode="a"))
 
     @elapsed_time
     def optimize(self):
@@ -150,7 +144,7 @@ class Optimizer:
             self.logger.debug("Training Phase")
 
             for i, data in enumerate(tqdm(self.train_dl)):
-                support_data, query_data = data
+                support_data, _, query_data, _ = data
                 self.run_one_step_train(
                     support_data=support_data, query_data=query_data,
                     train_accs=train_accs, train_total_losses=train_total_losses,

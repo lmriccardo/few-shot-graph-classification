@@ -32,7 +32,8 @@ def zeros(tensor):
 #####################################################################################
 
 
-def compute_threshold(graph_probability_vector: Dict[Data, torch.Tensor], 
+def compute_threshold(graph_probability_vector: Dict[int, torch.Tensor],
+                      data_list               : List[Data],
                       label_reliabilities     : Dict[Data, float]) -> float:
     """
     Compute the threshold for the label reliability acceptation.
@@ -43,6 +44,7 @@ def compute_threshold(graph_probability_vector: Dict[Data, torch.Tensor],
     Thus, we have to compute the derivative equal to 0
 
     :param graph_probability_vector: the probability vector for each graph
+    :param data_list: a list of graph data
     :param label_reliabilities: label reliability value for each graph
     :return: the optimal threshold
     """
@@ -50,7 +52,7 @@ def compute_threshold(graph_probability_vector: Dict[Data, torch.Tensor],
         """Compute the function g(G, y) = 1 if C(G) = y else -1 where C is the classifier"""
         graph_pred, y = [], []
         for graph, pred_vector in graph_probability_vector.items():
-            y.append(graph.y.item())
+            y.append(data_list[graph].y.item())
             graph_pred.append(torch.argmax(pred_vector).item())
         
         graph_pred = torch.tensor(graph_pred)
@@ -94,12 +96,13 @@ def compute_threshold(graph_probability_vector: Dict[Data, torch.Tensor],
     return theta.item()
 
 
-def data_filtering(train_ds                : GraphDataset, 
-                   validation_ds           : GraphDataset,
-                   graph_probability_vector: Dict[Data, torch.Tensor],
+def data_filtering(validation_ds           : GraphDataset,
+                   graph_probability_vector: Dict[int, torch.Tensor],
+                   data_list               : List[Data],
                    classes                 : List[int],
                    classifier_model        : torch.nn.Module,
-                   logger                  : logging.Logger) -> List[Tuple[nx.Graph, str]]:
+                   logger                  : logging.Logger,
+                   augmented_data          : List[Tuple[nx.Graph, str]]) -> List[Tuple[nx.Graph, str]]:
     """
     After applying the heuristic for data augmentation, we have a
     bunch of new graphs and respective labels that needs to be
@@ -107,25 +110,18 @@ def data_filtering(train_ds                : GraphDataset,
     by label reliability. For further information look at the paper
     https://arxiv.org/pdf/2007.05700.pdf by Zhou et al.
     
-    :param train_ds: the train dataset
     :param validation_ds: the validation dataset
     :param classes: the list of targets label
     :param classifier_model: the classifier
     :param logger: a simple logger
+    :param augmented_data: the new data generated from the train set
+    :param data_list: a list of graphs
     :param graph_probability_vector: a dictionary mapping for each graph the
                                      probability vector obtained after running
                                      the pre-trained classifier.
 
     :return: the list of graphs and labels that are reliable to be added
     """
-    # Get augmented data
-    heuristics = {
-        "random_mapping" : random_mapping_heuristic,
-        "motif_similarity_mapping" : motif_similarity_mapping_heuristic
-    }
-
-    chosen_heuristic = heuristics[config.HEURISTIC]
-    augmented_data = chosen_heuristic(train_ds)
     count_per_labels = validation_ds.count_per_class
 
     # Compute the confusion matrix Q
@@ -135,26 +131,28 @@ def data_filtering(train_ds                : GraphDataset,
     for idx, target in enumerate(classes):
        
         # Get graphs with a specific target
-        prob_vector_target = [v.tolist() for g, v in graph_probability_vector.items() if g.y.item() == target]
+        prob_vector_target = [v.tolist() for g, v in graph_probability_vector.items() if data_list[g].y.item() == target]
         prob_vector_tensor = torch.tensor(prob_vector_target)
         confusion_matrix[idx] = 1 / count_per_labels[target] *  prob_vector_tensor.sum(dim=0)
+    
+    print(classes_mapping)
     
     # Now, compute the label reliability for all graphs in the validation set
     label_reliabilities = dict()
     for graph, prob_vect in graph_probability_vector.items():
-        label = graph.y.items()
+        label = data_list[graph].y.item()
         label_idx = classes.index(label)
         label_reliabilities[graph] = prob_vect @ confusion_matrix[label_idx]
     
     # Compute the label reliability threshold theta
-    label_rel_threshold = compute_threshold(graph_probability_vector, label_reliabilities)
+    label_rel_threshold = compute_threshold(graph_probability_vector, data_list, label_reliabilities)
     logger.debug(f"Computed new label reliability threshold to {label_rel_threshold}")
 
     # Filter data
     filtered_data = []
     for graph, target in augmented_data:
         geotorch_data = graph2data(graph, target)
-        prob_vector = classifier_model(geotorch_data)
+        prob_vector = classifier_model(geotorch_data.x, geotorch_data.edge_index, geotorch_data.batch)
         r = prob_vector @ confusion_matrix[classes_mapping[target]]
         if r > label_rel_threshold:
             filtered_data.append((graph, target))

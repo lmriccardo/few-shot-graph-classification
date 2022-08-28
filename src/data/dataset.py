@@ -214,6 +214,9 @@ def random_mapping_heuristic(graphs: GraphDataset) -> List[Tuple[nx.Graph, str]]
             if node_x != node_y and (node_x, node_y) not in e_cdel:
                 e_cadd.append((node_x, node_y))
         
+        if not e_cadd:
+            continue
+        
         # Then we have to sample
         e_add = random.sample(e_cadd, k=math.ceil(current_graph.number_of_edges() * config.BETA))
         e_del = random.sample(e_cdel, k=math.ceil(current_graph.number_of_edges() * config.BETA))

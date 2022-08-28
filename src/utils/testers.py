@@ -94,7 +94,7 @@ class Tester:
         self.meta_model.eval()
 
         for _, data in enumerate(tqdm(test_dl)):
-            support_data, query_data = data
+            support_data, _, query_data, _ = data
             self.run_one_step_test(support_data, query_data, val_accs, query_losses_list)
         
         val_acc_avg = np.mean(val_accs)

@@ -64,12 +64,17 @@ def main():
 
     print(configurations, file=sys.stdout if not config.FILE_LOGGING else open(logger.handlers[1].baseFilename, mode="a"))
 
-    optimizer = Optimizer(train_ds, val_ds, logger, epochs=config.EPOCHS, dataset_name=dataset_name)
+    optimizer = Optimizer(train_ds, val_ds, logger, 
+                          epochs=config.EPOCHS, 
+                          dataset_name=dataset_name,
+                          model_name="gcn"
+                )
+            
     optimizer.optimize()
 
-    best_model_path = os.path.join(config.MODELS_SAVE_PATH, f"{dataset_name}_BestModel.pth")
-    tester = Tester(test_ds, logger, best_model_path)
-    tester.test()
+    # best_model_path = os.path.join(config.MODELS_SAVE_PATH, f"{dataset_name}_BestModel.pth")
+    # tester = Tester(test_ds, logger, best_model_path)
+    # tester.test()
 
     # delete_data_folder(data_dir)
 
@@ -122,6 +127,6 @@ def func() -> None:
 
 
 if __name__ == "__main__":
-    # main()
-    run_paper()
+    main()
+    # run_paper()
     # func()

@@ -582,13 +582,13 @@ def rename_edge_indexes(data_list: List[gdata.Data]) -> List[gdata.Data]:
     return data_list
 
 
-def data_batch_collate(data_list: List[gdata.Data]) -> gdata.Data:
+def data_batch_collate(data_list: List[gdata.Data]) -> Tuple[gdata.Data, List[gdata.Data]]:
     """
     Takes as input a list of data and create a new :obj:`torch_geometric.data.Data`
     collating all together. This is a replacement for torch_geometric.data.Batch.from_data_list
 
     :param data_list: a list of torch_geometric.data.Data objects
-    :return: a new torch_geometric.data.Data object
+    :return: a new torch_geometric.data.Data object as long as the original list
     """
     x = None
     edge_index = None
@@ -617,10 +617,12 @@ def data_batch_collate(data_list: List[gdata.Data]) -> gdata.Data:
         y=new_y, num_graphs=num_graphs, old_classes_mapping=mapping
     )
 
-    return data_batch
+    return data_batch, data_list
 
 
-def task_sampler_uncollate(task_sampler: 'data.sampler.TaskBatchSampler', data_batch: gdata.Batch):
+def task_sampler_uncollate(task_sampler: 'data.sampler.TaskBatchSampler', data_batch: gdata.Batch) -> Tuple[
+    gdata.Data, List[gdata.Data], gdata.Data, List[gdata.Data]
+]:
     """
     Takes as input the task sampler and a batch containing both the 
     support and the query set. It returns two different DataBatch
@@ -686,11 +688,11 @@ def task_sampler_uncollate(task_sampler: 'data.sampler.TaskBatchSampler', data_b
             query_data_batch += query_data
     
     # Rename the edges
-    support_data = data_batch_collate(rename_edge_indexes(support_data_batch))
-    query_data   = data_batch_collate(rename_edge_indexes(query_data_batch))
+    support_data, support_data_list = data_batch_collate(rename_edge_indexes(support_data_batch))
+    query_data, query_data_list     = data_batch_collate(rename_edge_indexes(query_data_batch))
 
     # Create new DataBatchs and return
-    return support_data, query_data
+    return support_data, support_data_list, query_data, query_data_list
 
 
 def scandir(root_path: str) -> List[str]:
@@ -792,6 +794,6 @@ def graph2data(graph: nx.Graph, target: str | int) -> gdata.Data:
                         .long()
 
     # Retrieve ground trouth labels
-    y = torch.tensor([int(target)], dtype=torch.int)
+    y = torch.tensor([int(target)], dtype=torch.long)
 
     return gdata.Data(x=x, edge_index=edge_index, y=y)
