@@ -269,6 +269,7 @@ def compute_num_nodes(graph_list: Dict[str, Tuple[nx.Graph, str]]) -> int:
     
     return num_nodes
 
+
 def convert(graph_list: Dict[str, Tuple[nx.Graph, str]], 
             num_nodes : int) -> Tuple[Dict[str, dict], torch.Tensor]:
     """
@@ -797,3 +798,8 @@ def graph2data(graph: nx.Graph, target: str | int) -> gdata.Data:
     y = torch.tensor([int(target)], dtype=torch.long)
 
     return gdata.Data(x=x, edge_index=edge_index, y=y)
+
+
+def get_all_labels(graphs: Dict[str, Tuple[nx.Graph, str]]) -> torch.Tensor:
+    """ Return a list containings all labels of the dataset """
+    return torch.tensor(list(set([int(v[1]) for _, v in graphs.items()])))

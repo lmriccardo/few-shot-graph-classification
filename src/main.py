@@ -67,7 +67,7 @@ def main():
     optimizer = Optimizer(train_ds, val_ds, logger, 
                           epochs=config.EPOCHS, 
                           dataset_name=dataset_name,
-                          model_name="gcn"
+                          model_name="sage"
                 )
             
     optimizer.optimize()

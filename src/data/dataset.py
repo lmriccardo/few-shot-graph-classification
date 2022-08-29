@@ -1,7 +1,12 @@
 import torch
 import torch_geometric.data as gdata
 
-from utils.utils import download_zipped_data, load_with_pickle, cartesian_product, graph2data
+from utils.utils import download_zipped_data, \
+    load_with_pickle, \
+    cartesian_product, \
+    graph2data, \
+    data_batch_collate, \
+    rename_edge_indexes
 import config
 
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -92,7 +97,11 @@ class GraphDataset(gdata.Dataset):
         for _, graph in self.graphs_ds.items():
             targets.append(int(graph[1]))
 
-        return torch.tensor(targets)
+        return torch.tensor(targets).unique()
+    
+    def number_of_classes(self) -> int:
+        """Return the total number of classes"""
+        return self.targets().shape[0]
 
     def get(self, idx: Union[int, str]) -> gdata.Data:
         """ Return (Graph object, Adjacency matrix and label) of a graph """
@@ -105,13 +114,47 @@ class GraphDataset(gdata.Dataset):
         data = graph2data(g, label)
 
         return data
+
+    def get_graphs_per_label(self) -> Dict[str, List[nx.Graph]]:
+        """Return a dictionary (label, list_of_graph with that label)"""
+        graphs_per_label = {target.item(): [] for target in self.targets()}
+        for _, (g, label) in self.graphs_ds.items():
+            graphs_per_label[label].append(g)
+        
+        return graphs_per_label
+
+    def to_data(self) -> Tuple[gdata.Data, List[gdata.Data]]:
+        """Return the torch_geometric.data.Data format of the entire dataset"""
+        data_list = [graph2data(graph, label) for _, (graph, label) in self.graphs_ds.items()]
+        data, new_data_list = data_batch_collate(rename_edge_indexes(data_list))
+        return data, new_data_list
     
-    # TODO: custom __add__ and __iadd__ to extend the dataset
+    @staticmethod
+    def _count_per_class(graph_ds: 'GraphDataset') -> Dict[str, int]:
+        """Create a dictionary for count_per_class attribute"""
+        count_per_class = defaultdict(int)
+        for _, (_, label) in graph_ds.graphs_ds.items():
+            count_per_class[label] += 1
+        
+        return count_per_class
+    
+    def __add__(self, other: Union['GraphDataset', List[Tuple[nx.Graph, str]]]) -> 'GraphDataset':
+        """Create a new graph dataset as the sum of the current and the input given dataset"""
+        last_id = max(list(self.graphs_ds.keys())) + 1
+        if isinstance(other, GraphDataset):
+            other = list(other.graphs_ds.values())
 
+        data_dict = deepcopy(self.graphs_ds)
+        for elem in other:
+            data_dict[last_id] = elem
+            last_id += 1
 
-def get_all_labels(graphs: Dict[str, Tuple[nx.Graph, str]]) -> torch.Tensor:
-    """ Return a list containings all labels of the dataset """
-    return torch.tensor(list(set([int(v[1]) for _, v in graphs.items()])))
+        new_ds = GraphDataset(data_dict)
+        new_ds.count_per_class = GraphDataset._count_per_class(new_ds)
+        return new_ds
+    
+    def __iadd__(self, other: Union['GraphDataset', List[Tuple[nx.Graph, str]]]) -> 'GraphDataset':
+        return self.__add__(other)
 
 
 def generate_train_val_test(dataset_name: str,
@@ -160,7 +203,6 @@ def generate_train_val_test(dataset_name: str,
     return train_ds, test_ds, val_ds, data_dir
 
 
-
 def get_dataset(logger: logging.Logger, 
                 download: bool=False, 
                 dataset_name: str="TRIANGLES", 
@@ -174,6 +216,48 @@ def get_dataset(logger: logging.Logger,
         logger=logger
     )
     return train_ds, test_ds, val_ds, data_dir
+
+
+def split_dataset(dataset: GraphDataset, n_sample: int=2, **kwargs) -> List[GraphDataset]:
+    """
+    Split a single dataset into a number of smaller dataset
+
+    :param dataset: the full dataset
+    :param n_sample (default=2): the total number of smaller dataset to return
+    :param ratios (optional, Dict[str, float]): a dictionary where specifying sample ratio
+                                                for each of the N number of smaller dataset
+                                                the sum of all ratio must be <= 1.
+    """
+    # FIXME: now implemented only for a 2-split of the original dataset. Extends to N-split
+    graphs_per_label = dataset.get_graphs_per_label()
+    count_per_label = dataset.count_per_class
+
+    percs = [.8, .2]
+    ds_list = []
+    start_sampling_idx = {k : 0 for k in count_per_label}
+
+    for sample_number in range(n_sample):
+        graph_dict = dict()
+        graph_id = 0
+        graph_list = []
+        perc = percs[sample_number]
+
+        for label, gs in graphs_per_label.items():
+            to_sample = math.ceil(perc * count_per_label[label])
+            labels = [label] * to_sample
+            graph_elem = list(zip(gs[start_sampling_idx[label]:start_sampling_idx[label] + to_sample], labels))
+            graph_list += graph_elem
+            start_sampling_idx[label] += to_sample
+        
+        for (g, label) in graph_list:
+            graph_dict[graph_id] = (g, label)
+            graph_id += 1
+        
+        new_ds = GraphDataset(graph_dict)
+        new_ds.count_per_class = GraphDataset._count_per_class(new_ds)
+        ds_list.append(new_ds)
+    
+    return ds_list
 
 
 #####################################################################################

@@ -2,7 +2,7 @@ from data.dataset import GraphDataset, \
                          random_mapping_heuristic, \
                          motif_similarity_mapping_heuristic
 
-from utils.utils import graph2data
+from utils.utils import graph2data, rename_edge_indexes
 
 from typing import Dict, List, Tuple
 from torch_geometric.data import Data
@@ -135,8 +135,6 @@ def data_filtering(validation_ds           : GraphDataset,
         prob_vector_tensor = torch.tensor(prob_vector_target)
         confusion_matrix[idx] = 1 / count_per_labels[target] *  prob_vector_tensor.sum(dim=0)
     
-    print(classes_mapping)
-    
     # Now, compute the label reliability for all graphs in the validation set
     label_reliabilities = dict()
     for graph, prob_vect in graph_probability_vector.items():
@@ -151,8 +149,8 @@ def data_filtering(validation_ds           : GraphDataset,
     # Filter data
     filtered_data = []
     for graph, target in augmented_data:
-        geotorch_data = graph2data(graph, target)
-        prob_vector = classifier_model(geotorch_data.x, geotorch_data.edge_index, geotorch_data.batch)
+        geotorch_data = rename_edge_indexes([graph2data(graph, target)])[0]
+        prob_vector, _, _ = classifier_model(geotorch_data.x, geotorch_data.edge_index, geotorch_data.batch)
         r = prob_vector @ confusion_matrix[classes_mapping[target]]
         if r > label_rel_threshold:
             filtered_data.append((graph, target))

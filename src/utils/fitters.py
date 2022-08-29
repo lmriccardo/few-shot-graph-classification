@@ -156,7 +156,7 @@ class Optimizer:
 
             self.meta_model.eval()
             for i, data in enumerate(tqdm(self.val_dl)):
-                support_data, query_data = data
+                support_data, _, query_data, _ = data
                 self.run_one_step_validation(
                     support_data=support_data, query_data=query_data,
                     val_accs=val_accs, loop_counter=i

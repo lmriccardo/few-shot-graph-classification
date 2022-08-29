@@ -61,7 +61,10 @@ class AdaptiveStepMAML(nn.Module):
         noless = 1.0 - less
         log_weight = less * -1 + noless * torch.log(weight_abs + eps) / p
         sign = less * math.exp(p) * weight + noless * weight.sign()
-        assert  torch.sum(torch.isnan(log_weight))==0,'stop_gate input has nan'
+        if torch.sum(torch.isnan(log_weight)) != 0:
+            print("Log weight: ", log_weight)
+            print("Weight: ", weight)
+            raise AssertionError('stop_gate input has nan')
         return log_weight, sign
 
     def stop(self, step: int, loss: float, node_score: torch.Tensor):
@@ -76,10 +79,18 @@ class AdaptiveStepMAML(nn.Module):
                 inputs += [score]
 
             inputs = torch.stack(inputs, dim=0).unsqueeze(0)
-            inputs = self.smooth(inputs)[0]
+            
+            try:
+                inputs = self.smooth(inputs)[0]
+            except AssertionError:
+                print(inputs)
+                print(loss)
+                import sys
+                sys.exit(1)
+
             stop_gate, stop_hx = self.stop_gate(inputs, stop_hx)
 
-            return stop_gate    
+            return stop_gate
 
         return loss.new_zeros(1, dtype=torch.float)
 
