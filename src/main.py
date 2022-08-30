@@ -5,8 +5,8 @@ sys.path.append(os.getcwd())
 
 from data.dataset import get_dataset
 from utils.utils import configure_logger
-from utils.fitters import Optimizer
-from utils.testers import Tester
+from utils.trainers import ASMAMLTrainer
+from utils.testers import ASMAMLTester
 
 import paper
 import config
@@ -64,13 +64,13 @@ def main():
 
     print(configurations, file=sys.stdout if not config.FILE_LOGGING else open(logger.handlers[1].baseFilename, mode="a"))
 
-    optimizer = Optimizer(train_ds, val_ds, logger, 
-                          epochs=config.EPOCHS, 
-                          dataset_name=dataset_name,
-                          model_name="sage"
+    optimizer = ASMAMLTrainer(train_ds, val_ds, logger, 
+                              epochs=config.EPOCHS, 
+                              dataset_name=dataset_name,
+                              model_name="sage"
                 )
             
-    optimizer.optimize()
+    optimizer.train()
 
     # best_model_path = os.path.join(config.MODELS_SAVE_PATH, f"{dataset_name}_BestModel.pth")
     # tester = Tester(test_ds, logger, best_model_path)
@@ -103,11 +103,11 @@ def run_paper() -> None:
         epoch_size=200
     )
 
-    optimizer = Optimizer(dataset, val_dataset, logger, epochs=config.EPOCHS, dataset_name=config.DEFAULT_DATASET, paper=True)
+    optimizer = ASMAMLTrainer(dataset, val_dataset, logger, epochs=config.EPOCHS, dataset_name=config.DEFAULT_DATASET, paper=True)
     optimizer.train_dl = train_loader(0)
     optimizer.val_dl   = val_loader(0)
 
-    optimizer.optimize()
+    optimizer.train()
 
 
 def func() -> None:

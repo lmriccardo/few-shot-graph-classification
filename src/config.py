@@ -73,10 +73,11 @@ STOP_CONTROL_HIDDEN_SIZE = 20
 ############################### ML-EVOLVE CONFIGURATION ################################
 ########################################################################################
 
-BETA       = 0.15
-N_FOLD     = 5     # For nCross Fold Validation
-ITERATIONS = 5
-HEURISTIC  = "random_mapping"
+BETA                = 0.15
+N_FOLD              = 5     # For nCross Fold Validation
+N_CROSSVALIDATION   = 10    # Number of k-cross validation to run
+ITERATIONS          = 5
+HEURISTIC           = "random_mapping"
 
 LABEL_REL_THRESHOLD_STEPS = 1000
 LABEL_REL_THRESHOLD_BETA  = 30

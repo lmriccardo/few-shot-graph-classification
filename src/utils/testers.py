@@ -4,6 +4,7 @@ from models.gcn4maml import GCN4MAML
 from models.sage4maml import SAGE4MAML
 from algorithms.asmaml.asmaml import AdaptiveStepMAML
 from utils.utils import elapsed_time, setup_seed
+
 from typing import Union, List
 from torch_geometric.data import Data
 from tqdm import tqdm
@@ -13,10 +14,9 @@ import config
 import numpy as np
 import sys
 import torch
-import os
 
 
-class Tester:
+class ASMAMLTester:
     """Class for run tests using the best model from training"""
     def __init__(self, test_ds: GraphDataset, logger: logging.Logger, best_model_path: str,
                        dataset_name: str="TRIANGLES", model_name: str="sage", 

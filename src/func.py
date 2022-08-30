@@ -4,13 +4,13 @@ import os
 sys.path.append(os.getcwd())
 
 from models.gcn4maml import GCN4MAML
-from models.utils import data_filtering
+from algorithms.mevolve.mevolve import data_filtering
 from data.dataset import get_dataset, \
     random_mapping_heuristic, \
     motif_similarity_mapping_heuristic, \
     split_dataset
 from data.dataloader import get_dataloader
-from utils.utils import configure_logger, setup_seed, rename_edge_indexes, data2graph
+from utils.utils import configure_logger, setup_seed
 
 import config
 
