@@ -4,7 +4,7 @@ import os
 sys.path.append(os.getcwd())
 
 from models.gcn4maml import GCN4MAML
-from algorithms.mevolve.mevolve import data_filtering
+from algorithms.mevolve.mevolve import MEvolve
 from data.dataset import get_dataset, \
     random_mapping_heuristic, \
     motif_similarity_mapping_heuristic, \
@@ -56,7 +56,7 @@ def test():
     
     # TODO: input classes should be the classes of the training set.
     prob_vect = dict(zip(range(pred.shape[0]), pred))
-    filtered_data = data_filtering(
+    filtered_data = MEvolve.data_filtering(
         val_ds, prob_vect, support_list, 
         train_ds.targets(), 
         net, logger, augmented_data
@@ -120,5 +120,19 @@ def test2():
     # print("Final Lenght Filtered Data: ", len(filtered_data))
 
 
+def test3():
+    setup_seed(432)
+    logger = configure_logger(dataset_name=config.DEFAULT_DATASET)
+    train_ds, val_ds, _, _ = get_dataset(logger, dataset_name=config.DEFAULT_DATASET, data_dir=config.DATA_PATH)
+
+    from sklearn.model_selection import KFold
+
+    kfold = KFold(n_splits=5, shuffle=True)
+    for _, (a, b) in enumerate(kfold.split(train_ds)):
+        a_dl = get_dataloader(train_ds, n_way=config.TRAIN_WAY, k_shot=config.TRAIN_SHOT, n_query=config.TRAIN_QUERY,
+                              epoch_size=config.TRAIN_EPISODE, shuffle=True, batch_size=1, exclude_keys=b)
+        print(len(a_dl))
+
 # test()
-test2()
+# test2()
+test3()

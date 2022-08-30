@@ -1,12 +1,12 @@
-import torch
-import torch_geometric.loader as gloader
-
 from typing import List, Generic, Optional
 from config import T
+from torch.utils.data import DataLoader
+import torch_geometric.loader as gloader
 from data.dataset import GraphDataset
 from data.sampler import TaskBatchSampler
 
 
+# TODO: Understand the role of exclude_keys in order to implement an optimized KFold-Validation
 class GraphCollater(gloader.dataloader.Collater):
     def __init__(self, *args) -> None:
         super(GraphCollater, self).__init__(*args)
@@ -19,7 +19,7 @@ class GraphCollater(gloader.dataloader.Collater):
         return super(GraphCollater, self).__call__(batch)
 
 
-class FewShotDataLoader(torch.utils.data.DataLoader):
+class FewShotDataLoader(DataLoader):
     """Custom DataLoader for GraphDataset"""
 
     def __init__(self, dataset: GraphDataset,
@@ -54,11 +54,13 @@ class FewShotDataLoader(torch.utils.data.DataLoader):
 
 def get_dataloader(
     ds: GraphDataset, n_way: int, k_shot: int, n_query: int, 
-    epoch_size: int, shuffle: bool, batch_size: int
+    epoch_size: int, shuffle: bool, batch_size: int, 
+    exclude_keys: Optional[List[str]] = None
 ) -> FewShotDataLoader:
     """Return a dataloader instance"""
     return FewShotDataLoader(
         dataset=ds,
+        exclude_keys=exclude_keys,
         batch_sampler=TaskBatchSampler(
             dataset_targets=ds.targets(),
             n_way=n_way,

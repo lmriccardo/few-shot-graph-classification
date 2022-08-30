@@ -256,4 +256,3 @@ class KFoldTrainValTrainer(BaseTrainer):
                        dataset_name: str="TRIANGLES", save_suffix: str=""
     ) -> None:
         super().__init__(train_ds, val_ds, logger, model_name, paper, epochs, dataset_name, save_suffix)
-    

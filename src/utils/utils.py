@@ -1,21 +1,20 @@
-from email.generator import Generator
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, Generator
+from functools import wraps
+from datetime import datetime
+import torch_geometric.data as gdata
 import pickle
 import networkx as nx
 import numpy as np
 import plotly.graph_objects as go
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import config
 import os
 import shutil
 import logging
 import torch
-import torch_geometric.data as gdata
 import random
-from functools import wraps
 import time
 import requests
 import zipfile
-from datetime import datetime
 import sys
 
 
