@@ -9,7 +9,7 @@ import torch_geometric.data as gdata
 
 import numpy as np
 
-from models.asmaml.stopcontrol import StopControl
+from models.stopcontrol import StopControl
 
 import config
 import math
@@ -85,8 +85,7 @@ class AdaptiveStepMAML(nn.Module):
             except AssertionError:
                 print(inputs)
                 print(loss)
-                import sys
-                sys.exit(1)
+                raise AssertionError()
 
             stop_gate, stop_hx = self.stop_gate(inputs, stop_hx)
 
@@ -137,9 +136,20 @@ class AdaptiveStepMAML(nn.Module):
                 loss = self.compute_loss(logits, support_label[0])
 
             stop_probability = 0
-            if config.FLEXIBLE_STEP:
-                stop_probability = self.stop(k, loss, score)
-                self.stop_prob = stop_probability
+            try:
+                if config.FLEXIBLE_STEP:
+                    stop_probability = self.stop(k, loss, score)
+                    self.stop_prob = stop_probability
+            except AssertionError:
+                print("Logits: ", logits)
+                print("Score: ", score)
+                print("Y: ", support_data.y)
+                print("Edge Index: ", support_data.edge_index)
+                print("X: ", support_data.x)
+                print("Loss: ", loss)
+
+                import sys
+                sys.exit(1)
             
             stop_gates.append(stop_probability)
             scores.append(score.item())
@@ -246,9 +256,20 @@ class AdaptiveStepMAML(nn.Module):
 
             stop_probability = 0
 
-            if config.FLEXIBLE_STEP:
-                with torch.no_grad():
-                    stop_probability = self.stop(k, loss, score)
+            try:
+                if config.FLEXIBLE_STEP:
+                    with torch.no_grad():
+                        stop_probability = self.stop(k, loss, score)
+            except AssertionError:
+                print("Logits: ", logits)
+                print("Score: ", score)
+                print("Y: ", support_data.y)
+                print("Edge Index: ", support_data.edge_index)
+                print("X: ", support_data.x)
+                print("Loss: ", loss)
+
+                import sys
+                sys.exit(1)
             
             stop_gates.append(stop_probability)
             step = k

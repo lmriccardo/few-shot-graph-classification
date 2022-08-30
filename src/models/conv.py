@@ -9,7 +9,7 @@ from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.nn.inits import uniform
 from torch_geometric.utils import add_remaining_self_loops
 from models.utils import glorot, zeros
-from models.asmaml.linear import LinearModel
+from models.linear import LinearModel
 
 
 class GCNConv(MessagePassing):

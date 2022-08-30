@@ -3,7 +3,7 @@ import os
 
 sys.path.append(os.getcwd())
 
-from data.dataset import get_dataset, motif_similarity_mapping_heuristic
+from data.dataset import get_dataset
 from utils.utils import configure_logger
 from utils.fitters import Optimizer
 from utils.testers import Tester

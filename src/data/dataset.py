@@ -91,17 +91,21 @@ class GraphDataset(gdata.Dataset):
     def len(self) -> int:
         return len(self.graphs_ds.keys())
 
+    def get_classes(self) -> List[int]:
+        """Return all labels one time"""
+        return list(self.count_per_class.keys())
+
     def targets(self) -> torch.Tensor:
         """ Return all the labels """
         targets = []
         for _, graph in self.graphs_ds.items():
             targets.append(int(graph[1]))
 
-        return torch.tensor(targets).unique()
+        return torch.tensor(targets)
     
     def number_of_classes(self) -> int:
         """Return the total number of classes"""
-        return self.targets().shape[0]
+        return len(self.get_classes())
 
     def get(self, idx: Union[int, str]) -> gdata.Data:
         """ Return (Graph object, Adjacency matrix and label) of a graph """
@@ -117,7 +121,7 @@ class GraphDataset(gdata.Dataset):
 
     def get_graphs_per_label(self) -> Dict[str, List[nx.Graph]]:
         """Return a dictionary (label, list_of_graph with that label)"""
-        graphs_per_label = {target.item(): [] for target in self.targets()}
+        graphs_per_label = {target : [] for target in self.get_classes()}
         for _, (g, label) in self.graphs_ds.items():
             graphs_per_label[label].append(g)
         
@@ -126,8 +130,9 @@ class GraphDataset(gdata.Dataset):
     def to_data(self) -> Tuple[gdata.Data, List[gdata.Data]]:
         """Return the torch_geometric.data.Data format of the entire dataset"""
         data_list = [graph2data(graph, label) for _, (graph, label) in self.graphs_ds.items()]
+        print(data_list[0].edge_index)
         data, new_data_list = data_batch_collate(rename_edge_indexes(data_list))
-        return data, new_data_list
+        return data, data_list
     
     @staticmethod
     def _count_per_class(graph_ds: 'GraphDataset') -> Dict[str, int]:

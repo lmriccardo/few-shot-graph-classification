@@ -3,14 +3,14 @@ import sys
 import os
 sys.path.append(os.getcwd())
 
-from models.asmaml.gcn4maml import GCN4MAML
+from models.gcn4maml import GCN4MAML
 from models.utils import data_filtering
 from data.dataset import get_dataset, \
     random_mapping_heuristic, \
     motif_similarity_mapping_heuristic, \
     split_dataset
 from data.dataloader import get_dataloader
-from utils.utils import configure_logger, setup_seed
+from utils.utils import configure_logger, setup_seed, rename_edge_indexes, data2graph
 
 import config
 
@@ -82,36 +82,42 @@ def test2():
     print(total.number_of_classes())
     net = GCN4MAML(num_features=config.NUM_FEATURES[config.DEFAULT_DATASET], num_classes=total.number_of_classes())
     total_data, total_data_list = new_val_ds.to_data()
-    print(total_data)
+    # print(total_data)
 
-    pred, _, _ = net(total_data.x, total_data.edge_index, total_data.batch)
-    pred_idx = torch.nn.functional.softmax(pred, dim=1).argmax(dim=1)
-    loss_values = loss(pred, total_data.y)
+    print(total_data_list[0].edge_index)
+    # rename_edge_indexes(total_data_list)
+    # print(total_data.y)
+    # print(total_data.old_classes_mapping)
+    # print([x.y.item() for x in ])
 
-    print("Predictions: ", pred)
-    print("Prediction Size: ", pred.shape)
-    print("Prediction index: ", pred_idx)
-    print("Losses: ", loss_values)
+    # pred, _, _ = net(total_data.x, total_data.edge_index, total_data.batch)
+    # pred_idx = torch.nn.functional.softmax(pred, dim=1).argmax(dim=1)
+    # loss_values = loss(pred, total_data.y)
 
-    heuristics = {
-        "random_mapping" : random_mapping_heuristic,
-        "motif_similarity_mapping" : motif_similarity_mapping_heuristic
-    }
+    # print("Predictions: ", pred)
+    # print("Prediction Size: ", pred.shape)
+    # print("Prediction index: ", pred_idx)
+    # print("Losses: ", loss_values)
 
-    chosen_heuristic = heuristics[config.HEURISTIC]
-    augmented_data = chosen_heuristic(new_train_ds)
+    # heuristics = {
+    #     "random_mapping" : random_mapping_heuristic,
+    #     "motif_similarity_mapping" : motif_similarity_mapping_heuristic
+    # }
 
-    print("Used Heuristic: ", chosen_heuristic.__name__)
-    print("Lenght Augmented Data: ", len(augmented_data))
+    # chosen_heuristic = heuristics[config.HEURISTIC]
+    # augmented_data = chosen_heuristic(new_train_ds)
 
-    prob_vect = dict(zip(range(pred.shape[0]), pred))
-    filtered_data = data_filtering(
-        new_val_ds, prob_vect, total_data_list, 
-        new_train_ds.targets().tolist(),
-        net, logger, augmented_data
-    )
+    # print("Used Heuristic: ", chosen_heuristic.__name__)
+    # print("Lenght Augmented Data: ", len(augmented_data))
 
-    print("Final Lenght Filtered Data: ", len(filtered_data))
+    # prob_vect = dict(zip(range(pred.shape[0]), pred))
+    # filtered_data = data_filtering(
+    #     new_val_ds, prob_vect, total_data_list, 
+    #     new_train_ds.targets().tolist(),
+    #     net, logger, augmented_data
+    # )
+
+    # print("Final Lenght Filtered Data: ", len(filtered_data))
 
 
 # test()

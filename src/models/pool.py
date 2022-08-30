@@ -11,7 +11,7 @@ from torch_geometric.utils import softmax
 from torch_geometric.nn.inits import uniform
 from torch_geometric.nn.pool.topk_pool import topk, filter_adj
 from torch_geometric.nn.pool.sag_pool import SAGPooling
-from models.asmaml.conv import GraphConv
+from models.conv import GraphConv
 
 from typing import Optional
 

@@ -1,8 +1,8 @@
 from data.dataset import GraphDataset
 from data.dataloader import FewShotDataLoader, get_dataloader
-from models.asmaml.gcn4maml import GCN4MAML
-from models.asmaml.sage4maml import SAGE4MAML
-from models.asmaml.asmaml import AdaptiveStepMAML
+from models.gcn4maml import GCN4MAML
+from models.sage4maml import SAGE4MAML
+from algorithms.asmaml.asmaml import AdaptiveStepMAML
 from utils.utils import get_max_acc, elapsed_time, setup_seed
 from typing import Union, Tuple, List
 from torch_geometric.data import Data

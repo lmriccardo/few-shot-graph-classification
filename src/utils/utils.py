@@ -800,6 +800,23 @@ def graph2data(graph: nx.Graph, target: str | int) -> gdata.Data:
     return gdata.Data(x=x, edge_index=edge_index, y=y)
 
 
+def data2graph(data: gdata.Data) -> nx.DiGraph:
+    """From a torch_geometric.data.Data to networkx.Graph"""
+    attrs = data.x.tolist()
+    nodes = torch.hstack((data.edge_index[0], data.edge_index[1])).unique().tolist()
+
+    attrs_nodes = []
+    for i, node in enumerate(nodes):
+        attrs_nodes.append((node, {f"attr{j}" : attr for j, attr in enumerate(attrs[i])}))
+    
+    edges = list(map(tuple, data.edge_index.transpose(0,1).tolist()))
+    g = nx.DiGraph()
+    g.add_nodes_from(attrs_nodes)
+    g.add_edges_from(edges)
+
+    return g
+
+
 def get_all_labels(graphs: Dict[str, Tuple[nx.Graph, str]]) -> torch.Tensor:
     """ Return a list containings all labels of the dataset """
     return torch.tensor(list(set([int(v[1]) for _, v in graphs.items()])))

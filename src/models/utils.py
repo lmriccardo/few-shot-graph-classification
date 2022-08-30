@@ -1,11 +1,8 @@
-from data.dataset import GraphDataset, \
-                         random_mapping_heuristic, \
-                         motif_similarity_mapping_heuristic
-
-from utils.utils import graph2data, rename_edge_indexes
-
-from typing import Dict, List, Tuple
 from torch_geometric.data import Data
+
+from data.dataset import GraphDataset
+from utils.utils import graph2data, rename_edge_indexes
+from typing import Dict, List, Tuple
 
 import math
 import torch
