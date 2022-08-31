@@ -33,7 +33,7 @@ class BaseTrainer:
     """
     def __init__(self, train_ds: GraphDataset, val_ds: GraphDataset,
                        logger: logging.Logger, model_name: str="sage", 
-                       paper: bool=False, epochs: int=200, 
+                       paper: bool=False, epochs: int=200, batch_size: int=1,
                        dataset_name: str="TRIANGLES", save_suffix: str=""):
         self.train_ds = train_ds
         self.val_ds = val_ds
@@ -42,6 +42,7 @@ class BaseTrainer:
         self.paper = paper
         self.epochs = epochs
         self.dataset_name = dataset_name
+        self.batch_size = batch_size
 
         if self.paper:
             self.train_dl, self.val_dl = None, None
@@ -67,14 +68,14 @@ class BaseTrainer:
         train_dataloader = get_dataloader(
             ds=self.train_ds, n_way=config.TRAIN_WAY, k_shot=config.TRAIN_SHOT,
             n_query=config.TRAIN_QUERY, epoch_size=config.TRAIN_EPISODE,
-            shuffle=True, batch_size=1
+            shuffle=True, batch_size=self.batch_size
         )
 
         self.logger.debug("--- Creating the DataLoader for Validation ---")
         validation_dataloader = get_dataloader(
             ds=self.val_ds, n_way=config.TEST_WAY, k_shot=config.VAL_SHOT,
             n_query=config.VAL_QUERY, epoch_size=config.VAL_EPISODE,
-            shuffle=True, batch_size=1
+            shuffle=True, batch_size=self.batch_size
         )
 
         return train_dataloader, validation_dataloader
@@ -232,10 +233,7 @@ class ASMAMLTrainer(BaseTrainer):
         self.meta_model.eval()
         for i, data in enumerate(tqdm(self.val_dl)):
             support_data, _, query_data, _ = data
-            self.run_one_step_validation(
-                support_data=support_data, query_data=query_data,
-                val_accs=val_accs, loop_counter=i
-            )
+            self.run_one_step_validation(support_data=support_data, query_data=query_data, val_accs=val_accs)
         
         self.logger.debug("Ended Validation Phase")
         return val_accs
@@ -244,7 +242,7 @@ class ASMAMLTrainer(BaseTrainer):
         return super().train()
 
 
-class KFoldTrainValTrainer(BaseTrainer):
+class KFoldTrainer(BaseTrainer):
     """
     Trainer class. (1) train the classifier using a
     K-Fold Cross Validation; (2) validate the model,
@@ -252,7 +250,10 @@ class KFoldTrainValTrainer(BaseTrainer):
     """
     def __init__(self, train_ds: GraphDataset, val_ds: GraphDataset,
                        logger: logging.Logger, model_name: str="sage", 
-                       paper: bool=False, epochs: int=200, 
+                       paper: bool=False, epochs: int=200, batch_size: int=1,
                        dataset_name: str="TRIANGLES", save_suffix: str=""
     ) -> None:
-        super().__init__(train_ds, val_ds, logger, model_name, paper, epochs, dataset_name, save_suffix)
+        super().__init__(
+            train_ds, val_ds, logger, model_name, paper, 
+            epochs, dataset_name, save_suffix, batch_size=batch_size
+        )

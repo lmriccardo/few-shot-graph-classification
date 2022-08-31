@@ -71,8 +71,7 @@ class FewShotSampler(torch.utils.data.Sampler):
             for cl in target_classes:
                 labels_per_class = self.indices_per_class[cl]
                 assert len(labels_per_class) >= self.k_shot + self.n_query
-                selected_data = random.sample(
-                    labels_per_class.tolist(), self.k_shot + self.n_query)
+                selected_data = random.sample(labels_per_class.tolist(), self.k_shot + self.n_query)
                 n_way_k_shot_n_query.append(selected_data)
 
             yield torch.tensor(n_way_k_shot_n_query)

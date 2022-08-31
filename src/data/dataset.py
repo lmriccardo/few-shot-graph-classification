@@ -81,6 +81,24 @@ class GraphDataset(gdata.Dataset):
 
         return graph_dataset
 
+    @staticmethod
+    def get_dataset_from_labels(dataset: 'GraphDataset', labels: List[str | int]) -> 'GraphDataset':
+        """
+        Starting from the original dataset it returns a subset of it
+
+        :param dataset: the original dataset
+        :param labels: data indices to consider
+        :return: a new dataset
+        """
+        graph_ds = dict()
+        for idx, (graph_id, elem) in dataset.graphs_ds.items():
+            if idx not in labels or str(idx) not in labels:
+                graph_ds[graph_id] = elem
+        
+        new_dataset = GraphDataset(graph_ds)
+        new_dataset.count_per_class = GraphDataset._count_per_class(new_dataset)
+        return new_dataset
+
     def __repr__(self) -> str:
         return f"GraphDataset(classes={set(self.targets().tolist())},n_graphs={self.len()})"
 
@@ -130,9 +148,8 @@ class GraphDataset(gdata.Dataset):
     def to_data(self) -> Tuple[gdata.Data, List[gdata.Data]]:
         """Return the torch_geometric.data.Data format of the entire dataset"""
         data_list = [graph2data(graph, label) for _, (graph, label) in self.graphs_ds.items()]
-        print(data_list[0].edge_index)
         data, new_data_list = data_batch_collate(rename_edge_indexes(data_list))
-        return data, data_list
+        return data, new_data_list
     
     @staticmethod
     def _count_per_class(graph_ds: 'GraphDataset') -> Dict[str, int]:
