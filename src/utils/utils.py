@@ -819,3 +819,9 @@ def data2graph(data: gdata.Data) -> nx.DiGraph:
 def get_all_labels(graphs: Dict[str, Tuple[nx.Graph, str]]) -> torch.Tensor:
     """ Return a list containings all labels of the dataset """
     return torch.tensor(list(set([int(v[1]) for _, v in graphs.items()])))
+
+
+def compute_accuracy(vector_a: torch.Tensor, vector_b: torch.Tensor) -> float:
+    """Compute the accuracy, i.e., the percentage of equal elements"""
+    equals = torch.eq(vector_a, vector_b)
+    return equals.sum() * 100 / vector_a.shape[0]

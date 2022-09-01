@@ -7,7 +7,9 @@ from torch_geometric.data import Data
 
 from data.dataset import GraphDataset
 from data.dataloader import get_dataloader, FewShotDataLoader
-from typing import List, Tuple, Optional
+from utils.utils import compute_accuracy
+from typing import List, Tuple, Union
+from torch.nn.modules.loss import _Loss, _WeightedLoss
 
 import config
 import logging
@@ -56,7 +58,7 @@ class KFoldCrossValidationWrapper:
         return tt_list
     
     @staticmethod
-    def kFold_validation(trainer: 'KFoldTrainer', logger: logging.Logger) -> None:
+    def kFold_validation(trainer: 'KFoldTrainer', logger: logging.Logger, loss: Union[_Loss, _WeightedLoss]) -> None:
 
         @wrapt.decorator
         def wrapper(fun, *args, **kwargs) -> None:
@@ -69,7 +71,7 @@ class KFoldCrossValidationWrapper:
             )
 
             for fold, train_dl, val_data in dataloaders:
-                print(f"Folder Number: {fold + 1}")
+                print(f"FOLD NUMBER: {fold + 1}")
                 print("---------------------------------------------------------------")
                 
                 # Run the wrapper function
@@ -82,12 +84,26 @@ class KFoldCrossValidationWrapper:
 
                 with torch.no_grad():
                     net = trainer.model
+                    net.eval()
 
                     # To GPU if necessary
                     if config.DEVICE != "cpu":
                         val_data = val_data.pin_memory()
                         val_data = val_data.to(config.DEVICE)
                     
+                    # Takes the output of the model, compute the loss and the accuracy
                     logits, _, _ = net(val_data.x, val_data.edge_idex, val_data.batch)
-                    loss = nn.CrossEntropyLoss()(logits, val_data.y)
+                    loss_val = loss(logits, val_data.y)
                     preds = F.softmax(logits, dim=1).argmax(dim=1)
+                    acc = compute_accuracy(preds, val_data.y)
+
+                    print("Validation Loss: {:.5f}".format(loss_val))
+                    print("Validation Accuracy: {:.5f}".format(acc))
+
+                print("---------------------------------------------------------------")
+                print(f"End testing with fold: {fold + 1}...")
+                print("===============================================================")
+            
+            return None
+        
+        return wrapper

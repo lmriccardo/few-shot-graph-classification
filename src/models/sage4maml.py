@@ -1,12 +1,15 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 from torch_geometric.nn import global_mean_pool, global_max_pool
+from copy import deepcopy
 
 from models.conv import SAGEConv
 from models.pool import SAGPool4MAML
 from models.linear import LinearModel
 from models.nis import NodeInformationScore
+
 import config
 
 
@@ -45,56 +48,86 @@ class SAGE4MAML(nn.Module):
         if self.paper:
             edge_index = edge_index.transpose(0,1)
 
+        old_x = x.tolist()
+
         x = self.relu(self.conv1(x, edge_index, edge_attr),negative_slope=0.1)
         if x.isnan().sum() != 0:
-            print("Is NAN: ", x)
+            print("Conv1 Is NAN: ", x)
+            print(old_x)
+
+        old_x = x.tolist()
         x, edge_index, edge_attr, batch, _, _ = self.pool1(x, edge_index, None, batch)
         if x.isnan().sum() != 0:
-            print("Is NAN: ", x)
+            print("Pool1, Is NAN: ", x)
+            print(old_x)
+        
         x1 = torch.cat([global_max_pool(x, batch), global_mean_pool(x, batch)], dim=1)
         if x.isnan().sum() != 0:
-            print("Is NAN: ", x)
-
+            print("Cat Is NAN: ", x1)
+        
+        old_x = x.tolist()
         x = self.relu(self.conv2(x, edge_index, edge_attr),negative_slope=0.1)
         if x.isnan().sum() != 0:
-            print("Is NAN: ", x)
+            print("Conv2 Is NAN: ", x)
+            print(old_x)
+        
+        old_x = x.tolist()
         x, edge_index, edge_attr, batch, _, _ = self.pool2(x, edge_index, None, batch)
         if x.isnan().sum() != 0:
-            print("Is NAN: ", x)
+            print("Poll2, Is NAN: ", x)
+            print(old_x)
+        
         x2 = torch.cat([global_max_pool(x, batch), global_mean_pool(x, batch)], dim=1)
         if x.isnan().sum() != 0:
-            print("Is NAN: ", x)
+            print("Cat2 Is NAN: ", x2)  
 
+        old_x = x.tolist()
         x = self.relu(self.conv3(x, edge_index, edge_attr), negative_slope=0.1)
         if x.isnan().sum() != 0:
-            print("Is NAN: ", x)
+            print(" Conv3,Is NAN: ", x)
+            print(old_x)
+        
+        old_x = x.tolist()
         x, edge_index, edge_attr, batch, _, _ = self.pool3(x, edge_index, None, batch)
         if x.isnan().sum() != 0:
-            print("Is NAN: ", x)
+            print("Pool3, Is NAN: ", x)
+            print(old_x)
+        
         x3 = torch.cat([global_max_pool(x, batch), global_mean_pool(x, batch)], dim=1)
         if x.isnan().sum() != 0:
-            print("Is NAN: ", x)
+            print("Cat3 Is NAN: ", x3)
 
         x_information_score = self.calc_information_score(x, edge_index)
         score = torch.sum(torch.abs(x_information_score), dim=1)
 
+        old_x = x.tolist()
         x = self.relu(x1,negative_slope=0.1) + \
             self.relu(x2,negative_slope=0.1) + \
             self.relu(x3,negative_slope=0.1)
         
         if x.isnan().sum() != 0:
-            print("Is NAN: ", x)
+            print("RELU Is NAN: ", x)
+            print(old_x)
 
         graph_emb = x
 
+        old_x = x.tolist()
         x = self.relu(self.linear1(x),negative_slope=0.1)
         if x.isnan().sum() != 0:
-            print("Is NAN: ", x)
+            print("Linear1 Is NAN: ", x)
+            print(old_x)
+        
+        old_x = x.tolist()
         x = self.relu(self.linear2(x),negative_slope=0.1)
         if x.isnan().sum() != 0:
-            print("Is NAN: ", x)
+            print("Linear2 Is NAN: ", x)
+            print(old_x)
+            print(self.linear2.weight.fast, self.linear2.bias.fast)
+        
+        old_x = x.tolist()
         x = self.linear3(x)
         if x.isnan().sum() != 0:
-            print("Is NAN: ", x)
+            print("Linear3 Is NAN: ", x)
+            print(old_x)
 
         return x, score.mean(), graph_emb

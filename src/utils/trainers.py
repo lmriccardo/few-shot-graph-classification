@@ -1,11 +1,16 @@
+import torch
+import torch.optim as optim
+import torch.nn.functional as F
+
 from data.dataset import GraphDataset
 from data.dataloader import FewShotDataLoader, get_dataloader
 from models.gcn4maml import GCN4MAML
 from models.sage4maml import SAGE4MAML
 from algorithms.asmaml.asmaml import AdaptiveStepMAML
-from utils.utils import get_max_acc, elapsed_time, setup_seed
+from utils.utils import elapsed_time, setup_seed
+from utils.kfold import KFoldCrossValidationWrapper
 
-from typing import Union, Tuple, List
+from typing import Union, Tuple, List, Optional
 from torch_geometric.data import Data
 from tqdm import tqdm
 
@@ -13,7 +18,6 @@ import logging
 import config
 import numpy as np
 import sys
-import torch
 import os
 
 
@@ -85,13 +89,23 @@ class BaseTrainer:
         train_total_losses: List[float], train_final_losses: List[float], loop_counter: int
     ) -> None:
         """Run one episode, i.e. one or more tasks, of training"""
-        ...
+        if config.DEVICE != "cpu":
+            support_data = support_data.pin_memory()
+            support_data = support_data.to(config.DEVICE)
+
+            query_data = query_data.pin_memory()
+            query_data = query_data.to(config.DEVICE)
 
     def run_one_step_validation(self, 
         support_data: Data, query_data: Data, val_accs: List[float]
     ) -> None:
         """Run one episode, i.e. one or more tasks, of validation"""
-        ...
+        if config.DEVICE != "cpu":
+            support_data = support_data.pin_memory()
+            support_data = support_data.to(config.DEVICE)
+
+            query_data = query_data.pin_memory()
+            query_data = query_data.to(config.DEVICE)
 
     def train_phase(self) -> None:
         """Run the training phase"""
@@ -152,10 +166,13 @@ class ASMAMLTrainer(BaseTrainer):
     """Run Training with train set and validation set for the ASMAML model"""
     def __init__(self, train_ds: GraphDataset, val_ds: GraphDataset,
                        logger: logging.Logger, model_name: str="sage", 
-                       paper: bool=False, epochs: int=200, 
+                       paper: bool=False, epochs: int=200, batch_size: int=1,
                        dataset_name: str="TRIANGLES", save_suffix: str="ASMAML_"
     ) -> None:
-        super().__init__(train_ds, val_ds, logger, model_name, paper, epochs, dataset_name, save_suffix)
+        super().__init__(
+            train_ds, val_ds, logger, model_name, paper, 
+            epochs, batch_size, dataset_name, save_suffix
+        )
         self.meta_model = self.get_meta()
         self.model2save = self.meta_model
 
@@ -175,12 +192,10 @@ class ASMAMLTrainer(BaseTrainer):
     ) -> None:
         """Run one episode, i.e. one or more tasks, of training"""
         # Set support and query data to the GPU
-        if config.DEVICE != "cpu":
-            support_data = support_data.pin_memory()
-            support_data = support_data.to(config.DEVICE)
-
-            query_data = query_data.pin_memory()
-            query_data = query_data.to(config.DEVICE)
+        super().run_one_step_train(
+            support_data, query_data, train_accs,
+            train_total_losses, train_final_losses, loop_counter
+        )
 
         accs, step, final_loss, total_loss, _, _, _, _ = self.meta_model(
             support_data, query_data
@@ -199,13 +214,8 @@ class ASMAMLTrainer(BaseTrainer):
                                       query_data: Data, 
                                       val_accs: List[float]) -> None:
         """Run one episode, i.e. one or more tasks, of validation"""
-        if config.DEVICE != "cpu":
-            support_data = support_data.pin_memory()
-            support_data = support_data.to(config.DEVICE)
+        super().run_one_step_validation(support_data, query_data, val_accs)
 
-            query_data = query_data.pin_memory()
-            query_data = query_data.to(config.DEVICE)
-        
         accs, step, _, _, _ = self.meta_model.finetuning(support_data, query_data)
         val_accs.append(accs[step])
     
@@ -231,7 +241,7 @@ class ASMAMLTrainer(BaseTrainer):
         val_accs = []
         self.logger.debug("Validation Phase")
         self.meta_model.eval()
-        for i, data in enumerate(tqdm(self.val_dl)):
+        for _, data in enumerate(tqdm(self.val_dl)):
             support_data, _, query_data, _ = data
             self.run_one_step_validation(support_data=support_data, query_data=query_data, val_accs=val_accs)
         
@@ -249,11 +259,86 @@ class KFoldTrainer(BaseTrainer):
     i.e. finetune the classifier, using the validation set. 
     """
     def __init__(self, train_ds: GraphDataset, val_ds: GraphDataset,
-                       logger: logging.Logger, model_name: str="sage", 
-                       paper: bool=False, epochs: int=200, batch_size: int=1,
-                       dataset_name: str="TRIANGLES", save_suffix: str=""
+                       logger: logging.Logger, meta_model: torch.nn.Module,
+                       model_name: str="sage", paper: bool=False, epochs: int=200, 
+                       batch_size: int=1, dataset_name: str="TRIANGLES", save_suffix: str=""
     ) -> None:
         super().__init__(
             train_ds, val_ds, logger, model_name, paper, 
             epochs, dataset_name, save_suffix, batch_size=batch_size
         )
+
+        self.meta_model = meta_model
+        self.model2save = self.meta_model
+        self.save_suffix = f"{meta_model.__class__.__name__}_KFold_"
+        self.model = self.meta_model.net
+
+    def run_one_step_train(
+        self, support_data: Data, query_data: Data, train_accs: List[float],
+        train_total_losses: List[float], train_final_losses: List[float], loop_counter: int
+    ) -> None:
+        # to GPU if needed
+        super().run_one_step_train(
+            support_data, query_data, train_accs,
+            train_total_losses, train_final_losses, loop_counter
+        )
+
+        accs, step, final_loss, total_loss, _, _, _, _ = self.meta_model(
+            support_data, query_data
+        )
+
+        train_accs.append(accs[step])
+        train_final_losses.append(final_loss)
+        train_total_losses.append(total_loss)
+
+        if (loop_counter + 1) % 50 == 0:
+            print(f"({loop_counter + 1})" + " Mean Accuracy: {:.6f}, Mean Final Loss: {:.6f}, Mean Total Loss: {:.6f}".format(
+                np.mean(train_accs), np.mean(train_final_losses), np.mean(train_total_losses)
+                ), file=sys.stdout if not config.FILE_LOGGING else open(self.logger.handlers[1].baseFilename, mode="a"))
+
+    def run_one_step_validation(self, support_data: Data, 
+                                      query_data: Data, 
+                                      val_accs: List[float]) -> None:
+        """Run one episode, i.e. one or more tasks, of validation"""
+        super().run_one_step_validation(support_data, query_data, val_accs)
+
+        accs, step, _, _, _ = self.meta_model.finetuning(support_data, query_data)
+        val_accs.append(accs[step])
+
+    def train_phase(self) -> None:
+        train_dataloader = None
+
+        @KFoldCrossValidationWrapper.kFold_validation(trainer=self, logger=self.logger, loss=self.meta_model.loss)
+        def _train_phase(train_dl: Optional[FewShotDataLoader]=None) -> None:
+            self.meta_model.train()
+            train_accs, train_final_losses, train_total_losses = [], [], []
+
+            self.logger.debug("Training Phase")
+
+            for i, data in enumerate(tqdm(train_dl)):
+                support_data, _, query_data, _ = data
+                self.run_one_step_train(
+                    support_data=support_data, query_data=query_data,
+                    train_accs=train_accs, train_total_losses=train_total_losses,
+                    train_final_losses=train_final_losses, loop_counter=i
+                )
+            
+            self.logger.debug("Ended Training Phase")
+
+            return train_accs, train_final_losses, train_total_losses
+        
+        return _train_phase(train_dataloader)
+
+    def validation_phase(self) -> List[float]:
+        val_accs = []
+        self.logger.debug("Validation Phase")
+        self.meta_model.eval()
+        for _, data in enumerate(tqdm(self.val_dl)):
+            support_data, _, query_data, _ = data
+            self.run_one_step_validation(support_data=support_data, query_data=query_data, val_accs=val_accs)
+        
+        self.logger.debug("Ended Validation Phase")
+        return val_accs
+    
+    def train(self):
+        return super().train()
