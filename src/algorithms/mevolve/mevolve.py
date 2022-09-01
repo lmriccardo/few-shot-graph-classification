@@ -1,15 +1,12 @@
-# From the paper https://arxiv.org/pdf/2007.05700.pdf
-# TODO: Implement Algorithm 2 of the paper
-# TODO: This how to merge few-shot learning with cross-fold validation
+"""From the paper https://arxiv.org/pdf/2007.05700.pdf"""
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
 
 from torch_geometric.data import Data
 
-from data.dataset import GraphDataset
+from data.dataset import GraphDataset, augment_dataset
 from utils.utils import rename_edge_indexes, graph2data
+from utils.trainers import BaseTrainer
 from typing import Dict, List, Tuple
 
 import config
@@ -20,23 +17,30 @@ import logging
 class MEvolve:
     """
     The Model Evolution framework presented in the paper
+
+    **NOTE**: the train and validation set must have common classes
+              however, we are not able to compute data filtering.
+              More specifically, the confusion matrix based on the
+              results given by the validation set.
     
     Args
-        model (nn.Module): the pre-trained classifier
+        trainer (BaseTrainer): the trainer used to train the model 
         n_iters (int): number of iterations (or evolutions)
         train_ds (GraphDataset): the training dataset
         val_ds (GraphDataset): the validation dataset
+        pre_trained_model (nn.Module): the pre-trained classifier
     """
     def __init__(self, 
-        model: nn.Module, n_iters: int, logger: logging.Logger,
+        trainer: BaseTrainer, n_iters: int, logger: logging.Logger,
         train_ds: GraphDataset, validation_ds: GraphDataset
     ) -> None:
-        self.model = model
+        self.trainer = trainer
         self.n_iters = n_iters
         self.train_ds = train_ds
         self.validation_ds = validation_ds
         self.logger = logger
-    
+        self.pre_trained_model = self.trainer.model
+ 
     @staticmethod
     def compute_threshold(graph_probability_vector: Dict[int, torch.Tensor],
                           data_list               : List[Data],
@@ -167,4 +171,35 @@ class MEvolve:
         """Run the evolution algorithm and return the final classifier"""
         current_iteration = 0
         while current_iteration < self.n_iters:
-            ...
+            # 1. Get augmented Data
+            d_pool = augment_dataset(self.train_ds, heuristic=config.HEURISTIC)
+
+            # 2. Compute the graph probability vector
+            validation_data, validation_data_list = self.validation_ds.to_data()
+            pred, _, _ = self.pre_trained_model(validation_data.x, 
+                                                validation_data.edge_index, 
+                                                validation_data.batch
+            )
+
+            prob_vect = dict(zip(range(pred.shape[0]), pred))
+
+            # 3. Compute data filtering
+            filtered_data = self.data_filtering(
+                self.validation_ds, prob_vect, validation_data_list, 
+                self.train_ds.targets().tolist(), self.pre_trained_model, 
+                self.logger, d_pool
+            )
+
+            # 4. Change the current train dataset of the trainer
+            self.train_ds = self.train_ds + filtered_data
+            self.trainer.train_ds = self.train_ds
+            self.trainer.val_ds   = self.validation_ds
+            self.trainer.train_dl, self.trainer.val_dl = self.trainer.get_dataloaders()
+
+            # 5. Re run the trainer
+            self.trainer.train()
+
+            # 6. Increment the iteration counter
+            current_iteration += 1
+        
+        return self.trainer.model

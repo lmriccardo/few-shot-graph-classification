@@ -99,10 +99,10 @@ def test2():
     # print("Prediction index: ", pred_idx)
     # print("Losses: ", loss_values)
 
-    # heuristics = {
-    #     "random_mapping" : random_mapping_heuristic,
-    #     "motif_similarity_mapping" : motif_similarity_mapping_heuristic
-    # }
+    heuristics = {
+        "random_mapping" : random_mapping_heuristic,
+        "motif_similarity_mapping" : motif_similarity_mapping_heuristic
+    }
 
     # chosen_heuristic = heuristics[config.HEURISTIC]
     # augmented_data = chosen_heuristic(new_train_ds)

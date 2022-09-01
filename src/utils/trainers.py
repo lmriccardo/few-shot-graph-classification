@@ -259,7 +259,7 @@ class KFoldTrainer(BaseTrainer):
     i.e. finetune the classifier, using the validation set. 
     """
     def __init__(self, train_ds: GraphDataset, val_ds: GraphDataset,
-                       logger: logging.Logger, meta_model: torch.nn.Module,
+                       logger: logging.Logger, meta_model: Optional[torch.nn.Module]=None,
                        model_name: str="sage", paper: bool=False, epochs: int=200, 
                        batch_size: int=1, dataset_name: str="TRIANGLES", save_suffix: str=""
     ) -> None:
@@ -268,6 +268,10 @@ class KFoldTrainer(BaseTrainer):
             epochs, dataset_name, save_suffix, batch_size=batch_size
         )
 
+        if meta_model is not None:
+            self._configure_meta(meta_model)
+
+    def _configure_meta(self, meta_model: torch.nn.Module) -> None:
         self.meta_model = meta_model
         self.model2save = self.meta_model
         self.save_suffix = f"{meta_model.__class__.__name__}_KFold_"

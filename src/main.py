@@ -3,17 +3,19 @@ import os
 
 sys.path.append(os.getcwd())
 
-from data.dataset import get_dataset
+from data.dataset import get_dataset, split_dataset
 from utils.utils import configure_logger
-from utils.trainers import ASMAMLTrainer
+from utils.trainers import ASMAMLTrainer, KFoldTrainer
 from utils.testers import ASMAMLTester
+from algorithms.mevolve.mevolve import MEvolve
+from algorithms.asmaml.asmaml import AdaptiveStepMAML
 
 import paper
 import config
 import torch
 
 
-def main():
+def asmaml():
     torch.set_printoptions(edgeitems=config.EDGELIMIT_PRINT)
     logger = configure_logger(file_logging=config.FILE_LOGGING, logging_path=config.LOGGING_PATH)
 
@@ -79,6 +81,50 @@ def main():
     # delete_data_folder(data_dir)
 
 
+def m_evolve() -> None:
+    torch.set_printoptions(edgeitems=config.EDGELIMIT_PRINT)
+    logger = configure_logger(file_logging=config.FILE_LOGGING, logging_path=config.LOGGING_PATH)
+
+    dataset_name = config.DEFAULT_DATASET
+    train_ds, test_ds, val_ds, _ = get_dataset(
+        download=config.DOWNLOAD_DATASET, 
+        data_dir=config.DATA_PATH, 
+        logger=logger,
+        dataset_name=dataset_name
+    )
+
+    # For M-Evolve we need to create a total train + val dataset
+    # and then resplit it into train and dataset 8:2
+    total_dataset = train_ds + val_ds
+    train_ds, val_ds = split_dataset(total_dataset)
+
+    # Initialize the trainer
+    trainer = KFoldTrainer(
+        train_ds=train_ds, val_ds=val_ds, logger=logger, 
+        model_name=config.MODEL_NAME, epochs=config.N_CROSSVALIDATION
+    )
+    
+    # FIXME: now we have only AS-MAML, but in the future more models would be used
+    meta = AdaptiveStepMAML(trainer.model,
+                            inner_lr=config.INNER_LR,
+                            outer_lr=config.OUTER_LR,
+                            stop_lr=config.STOP_LR,
+                            weight_decay=config.WEIGHT_DECAY,
+                            paper=False
+        ).to(config.DEVICE)
+    
+    trainer._configure_meta(meta)
+
+    me = MEvolve(
+        trainer=trainer, n_iters=config.ITERATIONS, 
+        logger=logger, train_ds=train_ds, validation_ds=val_ds
+    )
+
+    final_classifier = me.evolve()
+
+    # TODO: Implement a Tester
+
+
 def run_paper() -> None:
     logger = configure_logger(file_logging=config.FILE_LOGGING, logging_path=config.LOGGING_PATH)
     dataset = paper.GraphDataset(val=False)
@@ -127,6 +173,6 @@ def func() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    asmaml()
     # run_paper()
     # func()

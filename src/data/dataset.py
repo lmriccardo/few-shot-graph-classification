@@ -471,3 +471,16 @@ def motif_similarity_mapping_heuristic(graphs: GraphDataset) -> List[Tuple[nx.Gr
         new_graphs.append((g, label))
     
     return new_graphs
+
+
+def augment_dataset(dataset: GraphDataset, heuristic: str="random mapping") -> List[Tuple[nx.Graph, str]]:
+    """Apply the augmentation to the dataset"""
+    heuristics = {
+        "random_mapping"           : random_mapping_heuristic,
+        "motif_similarity_mapping" : motif_similarity_mapping_heuristic
+    }
+
+    chosen_heuristic = heuristics[heuristic]
+    augmented_data = chosen_heuristic(dataset)
+
+    return augmented_data
