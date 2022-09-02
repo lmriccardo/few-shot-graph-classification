@@ -3,8 +3,8 @@ from typing import TypeVar
 import os
 
 
-TRIANGLES_ZIP_URL = "https://cloud-storage.eu-central-1.linodeobjects.com/TRIANGLES.zip"
-COIL_DEL_ZIP_URL = "https://cloud-storage.eu-central-1.linodeobjects.com/COIL-DEL.zip"
+TRIANGLES_ZIP_URL = "https://drive.google.com/file/d/1zxSy63IvI5BuSPaqLDu9R-9UWWS6RU7j/view?usp=sharing"
+COIL_DEL_ZIP_URL = "https://drive.google.com/file/d/1zxSy63IvI5BuSPaqLDu9R-9UWWS6RU7j/view?usp=sharing"
 R52_ZIP_URL = "https://cloud-storage.eu-central-1.linodeobjects.com/R52.zip"
 LETTER_HIGH_ZIP_URL = "https://cloud-storage.eu-central-1.linodeobjects.com/Letter-High.zip"
 
