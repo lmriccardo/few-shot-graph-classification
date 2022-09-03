@@ -226,7 +226,10 @@ class ASMAMLTrainer(BaseTrainer):
         self.logger.debug("Training Phase")
 
         for i, data in enumerate(tqdm(self.train_dl)):
-            support_data, _, query_data, _ = data
+            if not self.paper:
+                support_data, _, query_data, _ = data
+            else:
+                support_data, query_data = data
             self.run_one_step_train(
                 support_data=support_data, query_data=query_data,
                 train_accs=train_accs, train_total_losses=train_total_losses,
@@ -242,7 +245,10 @@ class ASMAMLTrainer(BaseTrainer):
         self.logger.debug("Validation Phase")
         self.meta_model.eval()
         for _, data in enumerate(tqdm(self.val_dl)):
-            support_data, _, query_data, _ = data
+            if not self.paper:
+                support_data, _, query_data, _ = data
+            else:
+                support_data, query_data = data
             self.run_one_step_validation(support_data=support_data, query_data=query_data, val_accs=val_accs)
         
         self.logger.debug("Ended Validation Phase")

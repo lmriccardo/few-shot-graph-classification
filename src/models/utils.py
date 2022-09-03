@@ -1,14 +1,4 @@
-from torch_geometric.data import Data
-
-from data.dataset import GraphDataset
-from utils.utils import graph2data, rename_edge_indexes
-from typing import Dict, List, Tuple
-
 import math
-import torch
-import networkx as nx
-import config
-import logging
 
 
 def glorot(tensor):
@@ -24,6 +14,7 @@ def zeros(tensor):
         tensor.data.fill_(0)
 
 
-#####################################################################################
-############################### ML-EVOLVE FILTRATION ################################
-#####################################################################################
+def uniform(size, tensor):
+    bound = 1.0 / math.sqrt(size)
+    if tensor is not None:
+        tensor.data.uniform_(-bound, bound)

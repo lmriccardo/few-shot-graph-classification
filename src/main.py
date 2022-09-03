@@ -7,7 +7,7 @@ from data.dataset import get_dataset, split_dataset
 from utils.utils import configure_logger
 from utils.trainers import ASMAMLTrainer, KFoldTrainer
 from utils.testers import ASMAMLTester
-from algorithms.mevolve.mevolve import MEvolve
+from algorithms.mevolve.mevolve import MEvolveGDA
 from algorithms.asmaml.asmaml import AdaptiveStepMAML
 
 import paper
@@ -115,7 +115,7 @@ def m_evolve() -> None:
     
     trainer._configure_meta(meta)
 
-    me = MEvolve(
+    me = MEvolveGDA(
         trainer=trainer, n_iters=config.ITERATIONS, 
         logger=logger, train_ds=train_ds, validation_ds=val_ds
     )
@@ -173,6 +173,6 @@ def func() -> None:
 
 
 if __name__ == "__main__":
-    asmaml()
-    # run_paper()
+    # asmaml()
+    run_paper()
     # func()

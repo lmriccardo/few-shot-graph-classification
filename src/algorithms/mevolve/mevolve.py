@@ -14,7 +14,7 @@ import networkx as nx
 import logging
 
 
-class MEvolve:
+class MEvolveGDA:
     """
     The Model Evolution framework presented in the paper
 
@@ -153,7 +153,7 @@ class MEvolve:
             label_reliabilities[graph] = prob_vect @ confusion_matrix[label_idx]
         
         # Compute the label reliability threshold theta
-        label_rel_threshold = MEvolve.compute_threshold(graph_probability_vector, data_list, label_reliabilities)
+        label_rel_threshold = MEvolveGDA.compute_threshold(graph_probability_vector, data_list, label_reliabilities)
         logger.debug(f"Computed new label reliability threshold to {label_rel_threshold}")
 
         # Filter data
