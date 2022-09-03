@@ -111,17 +111,14 @@ class FewShotDataLoaderPaper:
         graph_indicator = []
         node_attr = []
 
-        current = 0
-
         node_number = 0
+        mapping = dict()
         for index, gid in enumerate(graph_ids):
             nodes = self.dataset.graph2nodes[gid]
             new_nodes = list(range(node_number, node_number+len(nodes)))
             node_number = node_number+len(nodes)
             node2new_number = dict(zip(nodes, new_nodes))
-
-            current += np.array([self.dataset.node_attribute_data[node]
-                                for node in nodes]).reshape(len(nodes), -1).shape[0]
+            mapping.update(node2new_number)
 
             node_attr.append(np.array(
                 [self.dataset.node_attribute_data[node] for node in nodes]).reshape(len(nodes), -1))
@@ -131,14 +128,18 @@ class FewShotDataLoaderPaper:
 
         node_attr = np.vstack(node_attr)
 
+        print("Paper Mapping: ", mapping)
+
         return [torch.from_numpy(node_attr).float(),
                 torch.from_numpy(np.array(edge_index)).long(),
                 torch.from_numpy(np.array(graph_indicator)).long()]
 
-    def sample_episode(self):
+    def sample_episode(self, idx):
         classes = self.sample_classes()
         support_graphs, query_graphs, support_labels, query_labels = self.sample_graphs_id(
             classes)
+
+        print("Ciao ", support_graphs, " ", idx, " ", support_labels, " ", classes)
 
         support_data = self.sample_graph_data(support_graphs)
         support_labels = torch.from_numpy(support_labels).long()
@@ -151,13 +152,13 @@ class FewShotDataLoaderPaper:
         return support_data, query_data
 
     def load_function(self, iter_idx):
-        support_data, query_data = self.sample_episode()
+        support_data, query_data = self.sample_episode(iter_idx)
         return support_data, query_data
 
     def get_iterator(self, epoch: int = 0):
-        rand_seed = epoch
-        random.seed(rand_seed)
-        np.random.seed(rand_seed)
+        #rand_seed = epoch
+        #random.seed(rand_seed)
+        #np.random.seed(rand_seed)
 
         tnt_dataset = tnt.dataset.ListDataset(
             elem_list=range(self.epoch_size), load=self.load_function

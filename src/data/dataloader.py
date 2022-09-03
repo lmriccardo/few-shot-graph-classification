@@ -13,6 +13,7 @@ class GraphCollater(gloader.dataloader.Collater):
 
     def __call__(self, batch: Generic[T]) -> Generic[T]:
         elem = batch[0]
+        print(batch)
         if isinstance(elem, GraphDataset):
             return self(elem)
 
@@ -20,7 +21,7 @@ class GraphCollater(gloader.dataloader.Collater):
 
 
 class FewShotDataLoader(DataLoader):
-    """Custom DataLoader for GraphDataset"""
+    """Custom few-shot sampler DataLoader for GraphDataset"""
 
     def __init__(self, dataset: GraphDataset,
                  batch_size: int = 1,
@@ -50,6 +51,31 @@ class FewShotDataLoader(DataLoader):
         for x in super().__iter__():
             support_batch, support_data_list, query_batch, query_data_list = self.batch_sampler.uncollate(x)
             yield support_batch, support_data_list, query_batch, query_data_list
+
+
+class GraphDataLoader(DataLoader):
+    """Custom simple DataLoader"""
+    def __init__(self, dataset     : GraphDataset,
+                       batch_size  : int=1,
+                       shuffle     : bool=True,
+                       follow_batch: Optional[List[str]] = None,
+                       exclude_keys: Optional[List[str]] = None,
+                       **kwargs
+    ) -> None:
+
+        if 'collate_fn' in kwargs:
+            del kwargs["collate_fn"]
+
+        self.follow_batch = follow_batch
+        self.exclude_keys = exclude_keys
+
+        super().__init__(
+            dataset,
+            batch_size,
+            shuffle,
+            collate_fn=GraphCollater(follow_batch, exclude_keys),
+            **kwargs,
+        )
 
 
 def get_dataloader(

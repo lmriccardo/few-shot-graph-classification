@@ -82,6 +82,8 @@ def asmaml():
 
 
 def m_evolve() -> None:
+    config.DEFAULT_DATASET = "TRIANGLES"
+
     torch.set_printoptions(edgeitems=config.EDGELIMIT_PRINT)
     logger = configure_logger(file_logging=config.FILE_LOGGING, logging_path=config.LOGGING_PATH)
 
@@ -93,6 +95,40 @@ def m_evolve() -> None:
         dataset_name=dataset_name
     )
 
+    logger.debug("--- Datasets ---")
+    print("\n- Train: ", train_ds)
+    print("- Test : ", test_ds)
+    print("- Validation: ", val_ds)
+    print()
+
+    logger.debug("--- Configurations ---")
+
+    configurations = ("\nDEVICE: {device}\n"                            +
+                      "DATASET NAME: {dataset_name}\n"                + 
+                      "TRAIN SUPPORT SIZE: {train_support_size}\n"    +
+                      "TRAIN QUERY SIZE: {train_query_size}\n"        +
+                      "VALIDATION SUPPORT SIZE: {val_support_size}\n" +
+                      "VALIDATION QUERY SIZE: {val_query_size}\n"     +
+                      "TEST SUPPORT SIZE: {test_support_size}\n"      +
+                      "TEST QUERY SIZE: {test_query_size}\n"          +
+                      "TRAIN EPISODE: {train_episode}\n"              +
+                      "VALIDATION EPISODE: {val_episode}\n"           +
+                      "NUMBER OF EPOCHS: {number_of_epochs}\n"        +
+                      "BATCH PER EPISODES: {batch_per_episodes}\n"
+        ).format(
+            device=config.DEVICE, dataset_name=dataset_name,
+            train_support_size=f"{config.TRAIN_WAY} x {config.TRAIN_SHOT}",
+            train_query_size=f"{config.TRAIN_WAY} x {config.TRAIN_QUERY}",
+            val_support_size=f"{config.TEST_WAY} x {config.VAL_SHOT}",
+            val_query_size=f"{config.TEST_WAY} x {config.VAL_QUERY}",
+            test_support_size=f"{config.TEST_WAY} x {config.VAL_SHOT}",
+            test_query_size=f"{config.TEST_WAY} x {config.VAL_QUERY}",
+            train_episode=config.TRAIN_EPISODE, val_episode=config.VAL_EPISODE,
+            number_of_epochs=config.N_CROSSVALIDATION, batch_per_episodes=config.BATCH_PER_EPISODES
+        )
+
+    print(configurations, file=sys.stdout if not config.FILE_LOGGING else open(logger.handlers[1].baseFilename, mode="a"))
+
     # For M-Evolve we need to create a total train + val dataset
     # and then resplit it into train and dataset 8:2
     total_dataset = train_ds + val_ds
@@ -101,7 +137,8 @@ def m_evolve() -> None:
     # Initialize the trainer
     trainer = KFoldTrainer(
         train_ds=train_ds, val_ds=val_ds, logger=logger, 
-        model_name=config.MODEL_NAME, epochs=config.N_CROSSVALIDATION
+        model_name=config.MODEL_NAME, epochs=config.N_CROSSVALIDATION,
+        dataset_name=config.DEFAULT_DATASET
     )
     
     # FIXME: now we have only AS-MAML, but in the future more models would be used
@@ -157,22 +194,93 @@ def run_paper() -> None:
 
 
 def func() -> None:
+    from data.dataloader import GraphDataLoader
+    from utils.utils import rename_edge_indexes, data_batch_collate, setup_seed, plot_graph, data2graph
+    from torch_geometric.utils import add_remaining_self_loops
+    from torch_geometric.data import Batch
+    from utils.utils import load_with_pickle
+
+    setup_seed(42)
+    torch.set_printoptions(edgeitems=config.EDGELIMIT_PRINT)
+
     logger = configure_logger(file_logging=config.FILE_LOGGING, logging_path=config.LOGGING_PATH)
 
     dataset_name = config.DEFAULT_DATASET
-    train_ds, _, _, _ = get_dataset(
+    train_ds, _, val_ds, _ = get_dataset(
         download=config.DOWNLOAD_DATASET, 
         data_dir=config.DATA_PATH, 
         logger=logger,
         dataset_name=dataset_name
     )
 
-    print(train_ds.count_per_class)
+    total_dataset = train_ds + val_ds
+    train_ds, val_ds = split_dataset(total_dataset)
 
-    # graphs = motif_similarity_mapping_heuristic(train_ds)
+    # gdl = GraphDataLoader(val_ds, batch_size=3, shuffle=True)
+    # sample = next(iter(gdl))
+    # new_data = rename_edge_indexes(sample.to_data_list())
+    # new_sample, _ = data_batch_collate(new_data)
+    # batch_sample = Batch.from_data_list(new_data)
+
+    # for d in new_data:
+    #     print(d.edge_index)
+
+    # print(new_sample)
+    # print(sample)
+    # print(sample.y)
+
+    # print(batch_sample)
+    # print(batch_sample.y)
+    # print(batch_sample.edge_index)
+    # print(new_sample.edge_index)
+
+    # print(torch.hstack((batch_sample.edge_index[0], batch_sample.edge_index[1])).unique())
+    # print(torch.hstack((new_sample.edge_index[0], new_sample.edge_index[1])).unique())
+
+    # print(add_remaining_self_loops(batch_sample.edge_index)[0].shape)
+    # print(add_remaining_self_loops(new_sample.edge_index)[0].shape)
+
+    # print("equals for X: ", torch.all(new_sample.x == sample.x))
+    # print(new_sample.y, sample.y)
+
+    # print(torch.all(new_sample.batch == sample.batch))
+
+    # plot_graph(data2graph(new_sample), "New Sample")
+
+    dataset = paper.GraphDataset(val=False)
+    train_loader = paper.FewShotDataLoaderPaper(
+        dataset=dataset,
+        n_way=3,
+        k_shot=1,
+        n_query=1,
+        batch_size=1,
+        num_workers=1,
+        epoch_size=200
+    )
+
+    print("============ PAPER ==============")
+
+    paper_sample, _ = next(iter(train_loader(42)))
+    sample_nodes, sample_edge_index, sample_graph_indicator, sample_label = paper_sample
+    sample_edge_index = sample_edge_index[0]
+    print(sample_edge_index.shape)
+    print(sample_edge_index)
+    print(sample_edge_index.transpose(0,1))
+
+    print("========== NOT PAPER ============")
+    index = [1093, 2108, 1434]
+    data_list = []
+    for i in index:
+        data_list.append(total_dataset.get(i))
+
+    d,_ = data_batch_collate(rename_edge_indexes(data_list))
+
+    print(d.edge_index)
+    print(d.edge_index.transpose(0,1))
 
 
 if __name__ == "__main__":
     # asmaml()
-    run_paper()
-    # func()
+    # m_evolve()
+    # run_paper()
+    func()

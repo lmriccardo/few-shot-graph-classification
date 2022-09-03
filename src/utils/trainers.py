@@ -271,7 +271,7 @@ class KFoldTrainer(BaseTrainer):
     ) -> None:
         super().__init__(
             train_ds, val_ds, logger, model_name, paper, 
-            epochs, dataset_name, save_suffix, batch_size=batch_size
+            epochs, batch_size, dataset_name, save_suffix
         )
 
         if meta_model is not None:

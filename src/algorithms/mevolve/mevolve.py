@@ -133,6 +133,7 @@ class MEvolveGDA:
         :return: the list of graphs and labels that are reliable to be added
         """
         count_per_labels = validation_ds.count_per_class
+        
 
         # Compute the confusion matrix Q
         n_classes = len(classes)
@@ -177,7 +178,7 @@ class MEvolveGDA:
             # 2. Compute the graph probability vector
             validation_data, validation_data_list = self.validation_ds.to_data()
             pred, _, _ = self.pre_trained_model(validation_data.x, 
-                                                validation_data.edge_index, 
+                                                validation_data.edge_index,
                                                 validation_data.batch
             )
 
