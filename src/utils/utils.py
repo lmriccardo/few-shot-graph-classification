@@ -552,26 +552,8 @@ def rename_edge_indexes(data_list: List[gdata.Data]) -> List[gdata.Data]:
     total_number_nodes = 0
     for data in data_list:
         total_number_nodes += data.x.shape[0]
-    
-    # Generate the new nodes
-    nodes = torch.arange(0, total_number_nodes)
-    
-    # Takes the old nodes from the edge_index attribute
-    # old_nodes = None
 
-    # for data in data_list:
-    #     x, y = data.edge_index
-    #     x = torch.hstack((x, y)).unique(sorted=False)
-
-    #     if old_nodes is None:
-    #         old_nodes = x
-    #         continue
-    
-    #     old_nodes = torch.hstack((old_nodes, x))
-    
-    # # Create mapping from old to new nodes
-    # mapping = dict(zip(sorted(old_nodes.tolist()), nodes.tolist()[:old_nodes.shape[0]]))
-
+    # Generate the mapping from old_nodes identifiers to new_node identifiers
     mapping = dict()
     node_number = 0
     for data in data_list:
@@ -579,8 +561,6 @@ def rename_edge_indexes(data_list: List[gdata.Data]) -> List[gdata.Data]:
         x = torch.hstack((x, y)).unique(sorted=True)
         mapping.update(dict(zip(x.tolist(), range(node_number, node_number + x.shape[0]))))
         node_number = node_number + x.shape[0]
-
-    print("Mapping: ", mapping)
     
     # Finally, map the new nodes
     for data in data_list:
@@ -790,37 +770,24 @@ def cartesian_product(x: Sequence, y: Optional[Sequence]=None) -> Generator:
             yield (el_x, el_y)
 
 
-def rebuild_edges(graph: Union[nx.Graph, nx.DiGraph]) -> List[Tuple[int, int]]:
-    """
-    Given a graph (directed or not) it returns a new list of edges
-    with the shape of [[0, 1], [1, 0], [0, 2], [2, 0] ...] instead of
-    [[0, 1], [0, 2], [1, 0], [2, 0]]. 
-
-    :param graph: a graph
-    :return: a list of tuple of integers 
-    """
-    current_edges = graph.edges
-    new_edges     = []
-    for x, y in current_edges:
-        if (x, y) not in new_edges:
-            new_edges.append((x, y))
-        
-        if (y, x) not in new_edges:
-            new_edges.append((y, x))
+def add_remaining_edges(edges: List[Tuple[int, int]]) -> List[Tuple[int,int]]:
+    """Add for each (x,y) edge a new edge (y,x) if it is not already present"""
+    for idx, e in enumerate(edges):
+        x, y = e
+        if (y, x) not in edges and [y, x] not in edges:
+            edges.insert(idx + 1, (y, x))
     
-    return new_edges
+    return edges
 
 
-def graph2data(graph: nx.Graph, target: str | int) -> gdata.Data:
+def graph2data(graph: nx.Graph, target: str | int, edges: List[Tuple[int, int]]) -> gdata.Data:
     """From a networkx.Graph returns a torch_geometric.data.Data"""
-    graph = graph.to_directed()
-
     # Retrieve nodes attributes
     attrs = sorted(list(graph.nodes(data=True)), key=lambda x: x[0])
     x = torch.tensor([list(map(int, a.values())) for _, a in attrs], dtype=torch.float)
-
-    rebuilted_edges = rebuild_edges(graph)
-    edge_index = torch.tensor([list(e) for e in rebuilted_edges], dtype=torch.long) \
+    
+    edges = add_remaining_edges(edges)
+    edge_index = torch.tensor([list(e) for e in edges], dtype=torch.long) \
                         .t()                                                  \
                         .contiguous()                                         \
                         .long()
@@ -846,30 +813,6 @@ def data2graph(data: gdata.Data) -> nx.DiGraph:
     g.add_edges_from(edges)
 
     return g
-
-
-# def data2list(data: gdata.Data) -> List[gdata.Data]:
-#     """From a single Data it returns the list of data that compose the original one"""
-#     attributes = data.x
-#     edge_index = data.edge_index.transpose(0,1)
-
-#     node2graph = dict()
-#     graph2edge = dict()
-#     current_graph_count = 0
-#     for x, y in edge_index:
-#         if x not in current_graph_count and y not in current_graph_count:
-#             current_graph_count += 1
-#             node2graph[x] = current_graph_count
-#             node2graph[y] = current_graph_count
-
-#         if x not in current_graph_count and y in current_graph_count:
-#             node2graph[x] = node2graph[y]
-        
-#         if y not in current_graph_count and x in current_graph_count:
-#             node2graph[y] = node2graph[x]
-
-#     graph2node = {}
-
 
 
 def get_all_labels(graphs: Dict[str, Tuple[nx.Graph, str]]) -> torch.Tensor:

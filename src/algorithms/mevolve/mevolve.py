@@ -2,9 +2,11 @@
 import torch
 import torch.nn as nn
 
+from torch.utils.data import DataLoader
 from torch_geometric.data import Data
 
 from data.dataset import GraphDataset, augment_dataset
+from data.dataloader import GraphDataLoader
 from utils.utils import rename_edge_indexes, graph2data
 from utils.trainers import BaseTrainer
 from typing import Dict, List, Tuple
@@ -140,11 +142,7 @@ class MEvolveGDA:
         classes_mapping = dict(zip(classes, range(n_classes)))
         confusion_matrix = torch.zeros((n_classes, n_classes))
         for idx, target in enumerate(classes):
-        
-            # Get graphs with a specific target
-            prob_vector_target = [v.tolist() for g, v in graph_probability_vector.items() if data_list[g].y.item() == target]
-            prob_vector_tensor = torch.tensor(prob_vector_target)
-            confusion_matrix[idx] = 1 / count_per_labels[target] *  prob_vector_tensor.sum(dim=0)
+            confusion_matrix[idx] = 1 / count_per_labels[target] *  graph_probability_vector.sum(dim=0)[idx]
         
         # Now, compute the label reliability for all graphs in the validation set
         label_reliabilities = dict()
@@ -159,14 +157,29 @@ class MEvolveGDA:
 
         # Filter data
         filtered_data = []
-        for graph, target in augmented_data:
+        for graph, target, edges in augmented_data:
             geotorch_data = rename_edge_indexes([graph2data(graph, target)])[0]
             prob_vector, _, _ = classifier_model(geotorch_data.x, geotorch_data.edge_index, geotorch_data.batch)
             r = prob_vector @ confusion_matrix[classes_mapping[target]]
             if r > label_rel_threshold:
-                filtered_data.append((graph, target))
+                filtered_data.append((graph, target, edges))
         
         return filtered_data
+    
+    @staticmethod
+    def compute_prob_vector(val_dl: DataLoader, n_classes: int, net: nn.Module) -> Dict[int, torch.Tensor]:
+        """Compute the probability vector for each graph in the validation set"""
+        dataset_size = val_dl.dataset.__len__()
+        preds = torch.rand((dataset_size, n_classes))
+        idx = 0
+        for val_data, _ in val_dl:
+            classes, _ = val_data.y.sort()
+            pred, _, _ = net(val_data.x, val_data.edge_index, val_data.batch)
+            preds[idx : idx + pred.shape[0], classes] = pred
+                
+            idx += val_dl.batch_size
+
+        return preds
 
     def evolve(self) -> nn.Module:
         """Run the evolution algorithm and return the final classifier"""
@@ -176,18 +189,18 @@ class MEvolveGDA:
             d_pool = augment_dataset(self.train_ds, heuristic=config.HEURISTIC)
 
             # 2. Compute the graph probability vector
-            validation_data, validation_data_list = self.validation_ds.to_data()
-            pred, _, _ = self.pre_trained_model(validation_data.x, 
-                                                validation_data.edge_index,
-                                                validation_data.batch
-            )
-
-            prob_vect = dict(zip(range(pred.shape[0]), pred))
+            val_dl = GraphDataLoader(self.validation_ds, batch_size=self.pre_trained_model.num_classes, drop_last=True)
+            prob_matrix = self.compute_prob_vector(val_dl, self.validation_ds.get_classes(), self.pre_trained_model)
+            
+            # 2.5 Create a list with all the validation graph data
+            validation_data_list = []
+            for _, data_list in val_dl:
+                validation_data_list.extend(data_list)
 
             # 3. Compute data filtering
             filtered_data = self.data_filtering(
-                self.validation_ds, prob_vect, validation_data_list, 
-                self.train_ds.targets().tolist(), self.pre_trained_model, 
+                self.validation_ds, prob_matrix, validation_data_list, 
+                self.train_ds.targets().tolist(), self.pre_trained_model,
                 self.logger, d_pool
             )
 

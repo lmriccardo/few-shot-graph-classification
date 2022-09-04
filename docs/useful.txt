@@ -177,3 +177,18 @@ Algorithm:
 support_labels  -->  tensor([[ ... ]])  -->  dim = 1 x (N  * K)
 support_nodes  -->  tensor([[[ . ], [ . ], ..., [ . ]]])  -->  dim = 1 x num_attributes x 1
 task_num  -->  dim(support_nodes).index(0) = 1
+
+
+----
+
+
+3 DATASETS
+==========
+training set, validation set = (original training set + original validation set).split(2)
+	1. training set
+	2. original validation set
+	3. validation set
+
+
+AS-MAML <- (trainin set, original validation set)
+M-Evolve Augmentation <- (training set, validation set)

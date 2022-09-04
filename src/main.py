@@ -132,7 +132,7 @@ def m_evolve() -> None:
     # For M-Evolve we need to create a total train + val dataset
     # and then resplit it into train and dataset 8:2
     total_dataset = train_ds + val_ds
-    train_ds, val_ds = split_dataset(total_dataset)
+    _, m_evolve_val_ds = split_dataset(total_dataset)
 
     # Initialize the trainer
     trainer = KFoldTrainer(
@@ -141,7 +141,7 @@ def m_evolve() -> None:
         dataset_name=config.DEFAULT_DATASET
     )
     
-    # FIXME: now we have only AS-MAML, but in the future more models would be used
+    # FIXME: now we have only AS-MAML, but in the future more models will be used
     meta = AdaptiveStepMAML(trainer.model,
                             inner_lr=config.INNER_LR,
                             outer_lr=config.OUTER_LR,
@@ -154,7 +154,8 @@ def m_evolve() -> None:
 
     me = MEvolveGDA(
         trainer=trainer, n_iters=config.ITERATIONS, 
-        logger=logger, train_ds=train_ds, validation_ds=val_ds
+        logger=logger, train_ds=train_ds, 
+        validation_ds=m_evolve_val_ds
     )
 
     final_classifier = me.evolve()
@@ -268,7 +269,7 @@ def func() -> None:
     print(sample_edge_index.transpose(0,1))
 
     print("========== NOT PAPER ============")
-    index = [1093, 2108, 1434]
+    index = [1093, 1434, 2108]
     data_list = []
     for i in index:
         data_list.append(total_dataset.get(i))
@@ -278,9 +279,73 @@ def func() -> None:
     print(d.edge_index)
     print(d.edge_index.transpose(0,1))
 
+    print(load_with_pickle("../data/COIL-DEL/COIL-DEL_train_set.pickle")["graph2edges"][1093])
+    print(load_with_pickle("../data/COIL-DEL/COIL-DEL_train_set.pickle")["graph2edges"][1434])
+    print(load_with_pickle("../data/COIL-DEL/COIL-DEL_train_set.pickle")["graph2edges"][2108])
+
+
+def func2():
+    from data.dataloader import GraphDataLoader
+    from data.dataset import get_dataset_from_labels
+    from utils.utils import setup_seed
+    from models.gcn4maml import GCN4MAML
+    from torch.utils.data import DataLoader
+    from typing import Dict
+    import torch.nn as nn
+
+
+    def compute_prob_vector(val_dl: DataLoader, n_classes: int, net: nn.Module) -> torch.Tensor:
+        """Compute the probability vector for each graph in the validation set"""
+        dataset_size = val_dl.dataset.__len__()
+        preds = torch.rand((dataset_size, n_classes))
+        idx = 0
+        for val_data, _ in val_dl:
+            classes, _ = val_data.y.sort()
+            pred, _, _ = net(val_data.x, val_data.edge_index, val_data.batch)
+            preds[idx : idx + pred.shape[0], classes] = pred
+                
+            idx += val_dl.batch_size
+
+        return preds
+
+
+    setup_seed(42)
+    torch.set_printoptions(edgeitems=config.EDGELIMIT_PRINT)
+
+    logger = configure_logger(file_logging=config.FILE_LOGGING, logging_path=config.LOGGING_PATH)
+
+    dataset_name = config.DEFAULT_DATASET
+    train_ds, _, val_ds, _ = get_dataset(
+        download=config.DOWNLOAD_DATASET, 
+        data_dir=config.DATA_PATH, 
+        logger=logger,
+        dataset_name=dataset_name
+    )
+
+    net = GCN4MAML(num_features=config.NUM_FEATURES[config.DEFAULT_DATASET], num_classes=config.TEST_WAY)
+
+    total_dataset = train_ds + val_ds
+    _, mevolve_val_ds = split_dataset(total_dataset)
+    mevolve_val_ds = get_dataset_from_labels(mevolve_val_ds, train_ds.get_classes())
+
+    gdl = GraphDataLoader(mevolve_val_ds, batch_size=config.TEST_WAY, shuffle=True, drop_last=True)
+    prob_vector = compute_prob_vector(gdl, len(mevolve_val_ds.get_classes()), net)
+    print(prob_vector)
+    print(prob_vector[0].sum())
+    print(prob_vector.sum(dim=1))
+    print(prob_vector.sum(dim=0).shape)
+    # compute_prob_vector(gdl, len(mevolve_val_ds.get_classes()), net)
+
+    #print("New Sample Data str: ", sample)
+    #print("X = ", sample.x)
+    #print("Edge Index = ", sample.edge_index)
+    #print("Batch: ", sample.batch)
+    #print("Y: ", sample.y)
+
 
 if __name__ == "__main__":
     # asmaml()
     # m_evolve()
     # run_paper()
-    func()
+    # func()
+    func2()

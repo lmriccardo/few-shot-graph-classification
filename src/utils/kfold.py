@@ -6,7 +6,7 @@ from sklearn.model_selection import KFold
 from torch_geometric.data import Data
 
 from data.dataset import GraphDataset
-from data.dataloader import get_dataloader, FewShotDataLoader
+from data.dataloader import get_dataloader, FewShotDataLoader, GraphDataLoader
 from utils.utils import compute_accuracy
 from typing import List, Tuple, Union
 from torch.nn.modules.loss import _Loss, _WeightedLoss
@@ -51,9 +51,9 @@ class KFoldCrossValidationWrapper:
                 shuffle=True, batch_size=batch_size
             )
 
-            val_data = validation_ds.to_data()
+            val_dl = GraphDataLoader(validation_ds, batch_size=3)
 
-            tt_list.append((fold_num, train_dl, val_data))
+            tt_list.append((fold_num, train_dl, val_dl))
         
         return tt_list
     
@@ -70,7 +70,7 @@ class KFoldCrossValidationWrapper:
                 batch_size=trainer.batch_size, logger=logger
             )
 
-            for fold, train_dl, val_data in dataloaders:
+            for fold, train_dl, val_dl in dataloaders:
                 print(f"FOLD NUMBER: {fold + 1}")
                 print("---------------------------------------------------------------")
                 
@@ -85,20 +85,28 @@ class KFoldCrossValidationWrapper:
                 with torch.no_grad():
                     net = trainer.model
                     net.eval()
-
-                    # To GPU if necessary
-                    if config.DEVICE != "cpu":
-                        val_data = val_data.pin_memory()
-                        val_data = val_data.to(config.DEVICE)
+                    val_accs, val_loss = [], []
                     
-                    # Takes the output of the model, compute the loss and the accuracy
-                    logits, _, _ = net(val_data.x, val_data.edge_idex, val_data.batch)
-                    loss_val = loss(logits, val_data.y)
-                    preds = F.softmax(logits, dim=1).argmax(dim=1)
-                    acc = compute_accuracy(preds, val_data.y)
+                    for val_data in val_dl: 
+                        # To GPU if necessary
+                        if config.DEVICE != "cpu":
+                            val_data = val_data.pin_memory()
+                            val_data = val_data.to(config.DEVICE)
+                        
+                        # Takes the output of the model, compute the loss and the accuracy
+                        logits, _, _ = net(val_data.x, val_data.edge_idex, val_data.batch)
+                        loss_val = loss(logits, val_data.y)
+                        preds = F.softmax(logits, dim=1).argmax(dim=1)
+                        acc = compute_accuracy(preds, val_data.y)
 
-                    print("Validation Loss: {:.5f}".format(loss_val))
-                    print("Validation Accuracy: {:.5f}".format(acc))
+                        val_loss.append(loss_val)
+                        val_accs.append(acc)
+
+                    mean_val_loss = torch.tensor(val_loss).mean()
+                    mean_val_acc  = torch.tensor(val_accs).mean()
+
+                    print("Mean Validation Loss: {:.5f}".format(mean_val_loss))
+                    print("Mean Validation Accuracy: {:.5f}".format(mean_val_acc))
 
                 print("---------------------------------------------------------------")
                 print(f"End testing with fold: {fold + 1}...")

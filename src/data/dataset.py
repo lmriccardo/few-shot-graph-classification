@@ -70,7 +70,7 @@ class GraphDataset(gdata.Dataset):
                 g.add_edges_from(graph_edges)
                 g.add_nodes_from(nodes)
             
-                graphs[graph_id] = (g, label)
+                graphs[graph_id] = (g, label, graph_edges)
             
             count_per_class[label] += len(graph_list)
 
@@ -80,24 +80,6 @@ class GraphDataset(gdata.Dataset):
         graph_dataset.count_per_class = count_per_class
 
         return graph_dataset
-
-    @staticmethod
-    def get_dataset_from_labels(dataset: 'GraphDataset', labels: List[str | int]) -> 'GraphDataset':
-        """
-        Starting from the original dataset it returns a subset of it
-
-        :param dataset: the original dataset
-        :param labels: data indices to consider
-        :return: a new dataset
-        """
-        graph_ds = dict()
-        for idx, (graph_id, elem) in dataset.graphs_ds.items():
-            if idx not in labels or str(idx) not in labels:
-                graph_ds[graph_id] = elem
-        
-        new_dataset = GraphDataset(graph_ds)
-        new_dataset.count_per_class = GraphDataset._count_per_class(new_dataset)
-        return new_dataset
 
     def __repr__(self) -> str:
         return f"GraphDataset(classes={set(self.targets().tolist())},n_graphs={self.len()})"
@@ -131,23 +113,23 @@ class GraphDataset(gdata.Dataset):
             idx = int(idx)
 
         graph = self.graphs_ds[idx]
-        g, label = graph[0], graph[1]
+        g, label, edges = graph[0], graph[1], graph[2]
 
-        data = graph2data(g, label)
+        data = graph2data(g, label, edges)
 
         return data
 
     def get_graphs_per_label(self) -> Dict[str, List[nx.Graph]]:
         """Return a dictionary (label, list_of_graph with that label)"""
         graphs_per_label = {target : [] for target in self.get_classes()}
-        for _, (g, label) in self.graphs_ds.items():
-            graphs_per_label[label].append(g)
+        for _, (g, label, e) in self.graphs_ds.items():
+            graphs_per_label[label].append((g, e))
         
         return graphs_per_label
 
     def to_data(self) -> Tuple[gdata.Data, List[gdata.Data]]:
         """Return the torch_geometric.data.Data format of the entire dataset"""
-        data_list = [graph2data(graph, label) for _, (graph, label) in self.graphs_ds.items()]
+        data_list = [graph2data(graph, label, edges) for _, (graph, label, edges) in self.graphs_ds.items()]
         data, new_data_list = data_batch_collate(rename_edge_indexes(data_list))
         return data, new_data_list
     
@@ -155,7 +137,7 @@ class GraphDataset(gdata.Dataset):
     def _count_per_class(graph_ds: 'GraphDataset') -> Dict[str, int]:
         """Create a dictionary for count_per_class attribute"""
         count_per_class = defaultdict(int)
-        for _, (_, label) in graph_ds.graphs_ds.items():
+        for _, (_, label, _) in graph_ds.graphs_ds.items():
             count_per_class[label] += 1
         
         return count_per_class
@@ -271,8 +253,8 @@ def split_dataset(dataset: GraphDataset, n_sample: int=2, **kwargs) -> List[Grap
             graph_list += graph_elem
             start_sampling_idx[label] += to_sample
         
-        for (g, label) in graph_list:
-            graph_dict[graph_id] = (g, label)
+        for (g, e), label in graph_list:
+            graph_dict[graph_id] = (g, label, e)
             graph_id += 1
         
         new_ds = GraphDataset(graph_dict)
@@ -280,6 +262,25 @@ def split_dataset(dataset: GraphDataset, n_sample: int=2, **kwargs) -> List[Grap
         ds_list.append(new_ds)
     
     return ds_list
+
+
+def get_dataset_from_labels(dataset: GraphDataset, labels: List[str | int]) -> GraphDataset:
+    """
+    Starting from the original dataset it returns a subset of it.
+    Moreover, it returns a new dataset which classes 'labels'.
+
+    :param dataset: the original dataset
+    :param labels: classes to consider
+    :return: a new dataset
+    """
+    graph_ds = dict()
+    for graph_id, (g, label, e) in dataset.graphs_ds.items():
+        if label in labels or str(label) in labels:
+            graph_ds[graph_id] = (g, label, e)
+    
+    new_dataset = GraphDataset(graph_ds)
+    new_dataset.count_per_class = GraphDataset._count_per_class(new_dataset)
+    return new_dataset
 
 
 #####################################################################################
@@ -309,7 +310,7 @@ def random_mapping_heuristic(graphs: GraphDataset) -> List[Tuple[nx.Graph, str]]
     
     # Iterate over all graphs
     for _, ds_element in graphs.graphs_ds.items():
-        current_graph, label = ds_element
+        current_graph, label, gedges = ds_element
 
         # Takes all edges
         e_cdel = current_graph.edges()
@@ -327,11 +328,17 @@ def random_mapping_heuristic(graphs: GraphDataset) -> List[Tuple[nx.Graph, str]]
         e_add = random.sample(e_cadd, k=math.ceil(current_graph.number_of_edges() * config.BETA))
         e_del = random.sample(e_cdel, k=math.ceil(current_graph.number_of_edges() * config.BETA))
 
+        # Remove and add edges
+        for e in e_del:
+            gedges.remove(e)
+        
+        gedges.extend(e_add)
+        
         # Let's do a deepcopy to not modify the original graph
         g = deepcopy(current_graph)
         g.remove_edges_from(e_del)
         g.add_edges_from(e_add)
-        new_graphs.append((g, label))
+        new_graphs.append((g, label, gedges))
     
     return new_graphs
 
@@ -373,7 +380,7 @@ def motif_similarity_mapping_heuristic(graphs: GraphDataset) -> List[Tuple[nx.Gr
 
     # Iterate over all graphs
     for _, ds_element in graphs.graphs_ds.items():
-        current_graph, label = ds_element
+        current_graph, label, gedges = ds_element
 
         # First of all let's define a mapping from graph's nodes and
         # their indexes in the adjacency matrix, so also for a the reverse mapping
@@ -464,11 +471,17 @@ def motif_similarity_mapping_heuristic(graphs: GraphDataset) -> List[Tuple[nx.Gr
 
             e_del.append(ch)
 
+        # Remove and add edges
+        for e in e_del:
+            gedges.remove(e)
+        
+        gedges.extend(e_add)
+
         # The last step is to construct the new graph
         g = deepcopy(current_graph)
         g.remove_edges_from(e_del)
         g.add_edges_from(e_add)
-        new_graphs.append((g, label))
+        new_graphs.append((g, label, gedges))
     
     return new_graphs
 

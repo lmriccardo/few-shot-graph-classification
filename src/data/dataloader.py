@@ -4,6 +4,7 @@ from torch.utils.data import DataLoader
 import torch_geometric.loader as gloader
 from data.dataset import GraphDataset
 from data.sampler import TaskBatchSampler
+from utils.utils import data_batch_collate, rename_edge_indexes
 
 
 # TODO: Understand the role of exclude_keys in order to implement an optimized KFold-Validation
@@ -13,12 +14,11 @@ class GraphCollater(gloader.dataloader.Collater):
 
     def __call__(self, batch: Generic[T]) -> Generic[T]:
         elem = batch[0]
-        print(batch)
         if isinstance(elem, GraphDataset):
             return self(elem)
 
         return super(GraphCollater, self).__call__(batch)
-
+        
 
 class FewShotDataLoader(DataLoader):
     """Custom few-shot sampler DataLoader for GraphDataset"""
@@ -76,6 +76,15 @@ class GraphDataLoader(DataLoader):
             collate_fn=GraphCollater(follow_batch, exclude_keys),
             **kwargs,
         )
+    
+    def __iter__(self):
+        for x in super().__iter__():
+            sample, sample_list = data_batch_collate(
+                rename_edge_indexes(
+                    x.to_data_list()
+                )
+            )
+            yield sample, sample_list
 
 
 def get_dataloader(
