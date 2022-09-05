@@ -182,6 +182,8 @@ def elapsed_time(func):
         end = time.time()
         logging.debug("Elapsed Time: {:.6f}".format(end - start))
     
+    return wrapper
+    
 def delete_data_folder(path2delete: str) -> None:
     """Delete the folder containing data"""
     logging.debug("--- Removing Content Data ---")

@@ -1,7 +1,10 @@
 """From the paper https://arxiv.org/pdf/2007.05700.pdf"""
 import torch
 import torch.nn as nn
+import torch.optim as optim
 
+from torch.nn.parameter import Parameter
+from torch.optim.lr_scheduler import _LRScheduler
 from torch.utils.data import DataLoader
 from torch_geometric.data import Data
 
@@ -46,7 +49,10 @@ class MEvolveGDA:
     @staticmethod
     def compute_threshold(graph_probability_vector: Dict[int, torch.Tensor],
                           data_list               : List[Data],
-                          label_reliabilities     : Dict[Data, float]) -> float:
+                          label_reliabilities     : Dict[Data, float],
+                          lr_scheduler            : _LRScheduler,
+                          optimizer               : optim.Optimizer,
+                          theta                   : Parameter) -> float:
         """
         Compute the threshold for the label reliability acceptation.
         This threshold is the result of the following expression
@@ -58,6 +64,9 @@ class MEvolveGDA:
         :param graph_probability_vector: the probability vector for each graph
         :param data_list: a list of graph data
         :param label_reliabilities: label reliability value for each graph
+        :param lr_scheduler: the learning rate scheduler for the computation of the threshold
+        :param optimizer: optimizer for theta that implement the SGD
+        :param theta: the parameter to optimize
         :return: the optimal threshold
         """
         def g_function() -> torch.Tensor:
@@ -73,9 +82,9 @@ class MEvolveGDA:
             diff = (graph_pred - y == 0)
             return torch.tensor(list(map(lambda x: 1 if x else -1, diff.tolist())))
 
-        def phi(theta: torch.Tensor, ri: torch.Tensor, g_values: torch.Tensor) -> torch.Tensor:
+        def phi(th: torch.Tensor, ri: torch.Tensor, g_values: torch.Tensor) -> torch.Tensor:
             """Compute the function Phi[x] = max(0, sign(x))"""
-            mul = (theta - ri) * g_values
+            mul = (th - ri) * g_values
 
             # In this case I decided to use a differentiable 
             # approximation of the sign function with respect
@@ -86,24 +95,24 @@ class MEvolveGDA:
             zero = torch.zeros((sign_approximation.shape[0],))
             return torch.maximum(zero, sign_approximation)
 
-        theta = torch.rand((1,), requires_grad=True)
+        theta = Parameter(torch.Tensor(1,))
         total_ri = torch.tensor(list(label_reliabilities.values()), dtype=torch.float)
         g_values = g_function()
-        
+
         current_step = 0
         current_minimum = float('inf')
         while current_step < config.LABEL_REL_THRESHOLD_STEPS and theta.item() != 0.0:
             f = phi(theta, total_ri, g_values).sum()
             f.backward()
 
-            with torch.no_grad():
-                theta = theta - config.LABEL_REL_THRESHOLD_STEP_SIZE * theta.grad
-
-            theta.requires_grad = True
-            current_step += 1
+            optimizer.step()
 
             if f.item() < current_minimum:
                 current_minimum = f.item()
+            
+            current_step += 1
+        
+        lr_scheduler.step()
         
         return theta.item()
 
@@ -114,7 +123,10 @@ class MEvolveGDA:
                        classes                 : List[int],
                        classifier_model        : torch.nn.Module,
                        logger                  : logging.Logger,
-                       augmented_data          : List[Tuple[nx.Graph, str]]) -> List[Tuple[nx.Graph, str]]:
+                       augmented_data          : List[Tuple[nx.Graph, str]],
+                       lr_scheduler            : _LRScheduler,
+                       optimizer               : optim.Optimizer,
+                       theta                   : Parameter) -> List[Tuple[nx.Graph, str]]:
         """
         After applying the heuristic for data augmentation, we have a
         bunch of new graphs and respective labels that needs to be
@@ -131,6 +143,9 @@ class MEvolveGDA:
         :param graph_probability_vector: a dictionary mapping for each graph the
                                         probability vector obtained after running
                                         the pre-trained classifier.
+        :param lr_scheduler: the learning rate scheduler for the computation of the threshold
+        :param optimizer: optimizer for theta that implement the SGD
+        :param theta: the parameter to optimize
 
         :return: the list of graphs and labels that are reliable to be added
         """
@@ -152,7 +167,10 @@ class MEvolveGDA:
             label_reliabilities[graph] = prob_vect @ confusion_matrix[label_idx]
         
         # Compute the label reliability threshold theta
-        label_rel_threshold = MEvolveGDA.compute_threshold(graph_probability_vector, data_list, label_reliabilities)
+        label_rel_threshold = MEvolveGDA.compute_threshold(
+            graph_probability_vector, data_list, 
+            label_reliabilities, lr_scheduler, optimizer, theta
+        )
         logger.debug(f"Computed new label reliability threshold to {label_rel_threshold}")
 
         # Filter data
@@ -181,8 +199,16 @@ class MEvolveGDA:
 
         return preds
 
-    def evolve(self) -> nn.Module:
+    def evolve(self, train: bool=False) -> nn.Module:
         """Run the evolution algorithm and return the final classifier"""
+        theta = Parameter(torch.Tensor(1,))
+        sgd_optim = optim.SGD(theta, 0.1)
+        lr_scheduler = optim.lr_scheduler.ExponentialLR(sgd_optim, gamma=0.9)
+
+        # Needed if the model is not pre-trained
+        if train:
+            self.trainer.train()
+
         current_iteration = 0
         while current_iteration < self.n_iters:
             # 1. Get augmented Data
@@ -201,7 +227,7 @@ class MEvolveGDA:
             filtered_data = self.data_filtering(
                 self.validation_ds, prob_matrix, validation_data_list, 
                 self.train_ds.targets().tolist(), self.pre_trained_model,
-                self.logger, d_pool
+                self.logger, d_pool, lr_scheduler, sgd_optim, theta
             )
 
             # 4. Change the current train dataset of the trainer

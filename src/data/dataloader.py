@@ -7,7 +7,6 @@ from data.sampler import TaskBatchSampler
 from utils.utils import data_batch_collate, rename_edge_indexes
 
 
-# TODO: Understand the role of exclude_keys in order to implement an optimized KFold-Validation
 class GraphCollater(gloader.dataloader.Collater):
     def __init__(self, *args) -> None:
         super(GraphCollater, self).__init__(*args)
