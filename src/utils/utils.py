@@ -18,6 +18,10 @@ import zipfile
 import sys
 
 
+########################################################
+################## PLOT GRAPH UTILITY ##################
+########################################################
+
 def plot_graph(G : Union[nx.Graph, nx.DiGraph], name: str) -> None:
     """
     Plot a graph
@@ -101,11 +105,51 @@ def plot_graph(G : Union[nx.Graph, nx.DiGraph], name: str) -> None:
     fig.show()
 
 
+#################################################################
+################## FOLDER MANAGEMENT UTILITIES ##################
+#################################################################
+
 def delete_data_folder(path2delete: str) -> None:
     """Delete the folder containing data"""
     logging.debug("--- Removing Content Data ---")
     shutil.rmtree(path2delete)
     logging.debug("--- Removed Finished Succesfully ---")
+
+
+def scandir(root_path: str) -> List[str]:
+    """Recursively scan a directory looking for files"""
+    root_path = os.path.abspath(root_path)
+    content = []
+    for file in os.listdir(root_path):
+        new_path = os.path.join(root_path, file)
+        if os.path.isfile(new_path):
+            content.append(new_path)
+            continue
+        
+        content += scandir(new_path)
+    
+    return content
+
+
+def download_zipped_data(url: str, path2extract: str, dataset_name: str, logger: logging.Logger) -> List[str]:
+    """Download and extract a ZIP file from URL. Return the content filename"""
+    logger.debug(f"--- Downloading from {url} ---")
+    response = requests.get(url)
+
+    abs_path2extract = os.path.abspath(path2extract)
+    zip_path = os.path.join(abs_path2extract, f"{dataset_name}.zip")
+    with open(zip_path, mode="wb") as iofile:
+        iofile.write(response.content)
+
+    # Extract the file
+    logger.debug("--- Extracting files from the archive ---")
+    with zipfile.ZipFile(zip_path, mode="r") as zip_ref:
+        zip_ref.extractall(abs_path2extract)
+
+    logger.debug(f"--- Removing {zip_path} ---")
+    os.remove(zip_path)
+
+    return scandir(os.path.join(path2extract, dataset_name))
 
 
 def setup_seed(seed=42):
@@ -116,12 +160,107 @@ def setup_seed(seed=42):
     torch.backends.cudnn.deterministic = True
 
 
-def get_batch_number(databatch, i_batch, n_way, k_shot):
-    """From a N batch takes the i-th batch"""
-    dim_databatch = n_way * k_shot
-    indices = torch.arange(0, config.BATCH_PER_EPISODES)
-    return gdata.Batch.from_data_list(databatch[indices * dim_databatch + i_batch])
+def save_with_pickle(path2save: str, content: Any) -> None:
+    """Save content inside a .pickle file denoted by path2save"""
+    path2save = path2save + ".pickle" if ".pickle" not in path2save else path2save
+    with open(path2save, mode="wb") as iostream:
+        pickle.dump(content, iostream)
 
+
+def load_with_pickle(path2load: str) -> Any:
+    """Load a content from a .pickle file"""
+    with open(path2load, mode="rb") as iostream:
+        return pickle.load(iostream)
+
+
+def elapsed_time(func):
+    """Just a simple wrapper for counting elapsed time from start to end"""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        start = time.time()
+        func(*args, **kwargs)
+        end = time.time()
+        logging.debug("Elapsed Time: {:.6f}".format(end - start))
+    
+def delete_data_folder(path2delete: str) -> None:
+    """Delete the folder containing data"""
+    logging.debug("--- Removing Content Data ---")
+    shutil.rmtree(path2delete)
+    logging.debug("--- Removed Finished Succesfully ---")
+
+
+def scandir(root_path: str) -> List[str]:
+    """Recursively scan a directory looking for files"""
+    root_path = os.path.abspath(root_path)
+    content = []
+    for file in os.listdir(root_path):
+        new_path = os.path.join(root_path, file)
+        if os.path.isfile(new_path):
+            content.append(new_path)
+            continue
+        
+        content += scandir(new_path)
+    
+    return content
+
+
+def download_zipped_data(url: str, path2extract: str, dataset_name: str, logger: logging.Logger) -> List[str]:
+    """Download and extract a ZIP file from URL. Return the content filename"""
+    logger.debug(f"--- Downloading from {url} ---")
+    response = requests.get(url)
+
+    abs_path2extract = os.path.abspath(path2extract)
+    zip_path = os.path.join(abs_path2extract, f"{dataset_name}.zip")
+    with open(zip_path, mode="wb") as iofile:
+        iofile.write(response.content)
+
+    # Extract the file
+    logger.debug("--- Extracting files from the archive ---")
+    with zipfile.ZipFile(zip_path, mode="r") as zip_ref:
+        zip_ref.extractall(abs_path2extract)
+
+    logger.debug(f"--- Removing {zip_path} ---")
+    os.remove(zip_path)
+
+    return scandir(os.path.join(path2extract, dataset_name))
+
+
+def setup_seed(seed=42):
+    random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    np.random.seed(seed)
+    torch.backends.cudnn.deterministic = True
+
+
+def save_with_pickle(path2save: str, content: Any) -> None:
+    """Save content inside a .pickle file denoted by path2save"""
+    path2save = path2save + ".pickle" if ".pickle" not in path2save else path2save
+    with open(path2save, mode="wb") as iostream:
+        pickle.dump(content, iostream)
+
+
+def load_with_pickle(path2load: str) -> Any:
+    """Load a content from a .pickle file"""
+    with open(path2load, mode="rb") as iostream:
+        return pickle.load(iostream)
+
+
+def elapsed_time(func):
+    """Just a simple wrapper for counting elapsed time from start to end"""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        start = time.time()
+        func(*args, **kwargs)
+        end = time.time()
+        logging.debug("Elapsed Time: {:.6f}".format(end - start))
+    
+    return wrapper
+
+
+######################################################################
+################## DATASET AND DATALOADER UTILITIES ##################
+######################################################################
 
 class GeneratorTxt2Graph:
     """
@@ -233,31 +372,6 @@ class GeneratorTxt2Graph:
         self._collect_graph_labels(graphs)
 
         return graphs
-
-
-def save_with_pickle(path2save: str, content: Any) -> None:
-    """Save content inside a .pickle file denoted by path2save"""
-    path2save = path2save + ".pickle" if ".pickle" not in path2save else path2save
-    with open(path2save, mode="wb") as iostream:
-        pickle.dump(content, iostream)
-
-
-def load_with_pickle(path2load: str) -> Any:
-    """Load a content from a .pickle file"""
-    with open(path2load, mode="rb") as iostream:
-        return pickle.load(iostream)
-
-
-def elapsed_time(func):
-    """Just a simple wrapper for counting elapsed time from start to end"""
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        start = time.time()
-        func(*args, **kwargs)
-        end = time.time()
-        logging.debug("Elapsed Time: {:.6f}".format(end - start))
-    
-    return wrapper
 
 
 def compute_num_nodes(graph_list: Dict[str, Tuple[nx.Graph, str]]) -> int:
@@ -533,11 +647,6 @@ def transform_dataset(dataset_root: str, **kwargs) -> None:
     save_with_pickle(node_attributes_file, attributes)
 
 
-def get_max_acc(accs, step, scores, min_step, test_step):
-    step = np.argmax(scores[min_step - 1 : test_step]) + min_step - 1
-    return accs[step]
-
-
 def rename_edge_indexes(data_list: List[gdata.Data]) -> List[gdata.Data]:
     """
     Takes as input a bunch of :obj:`torch_geometric.data.Data` and renames
@@ -686,40 +795,54 @@ def task_sampler_uncollate(task_sampler: 'data.sampler.TaskBatchSampler', data_b
     return support_data, support_data_list, query_data, query_data_list
 
 
-def scandir(root_path: str) -> List[str]:
-    """Recursively scan a directory looking for files"""
-    root_path = os.path.abspath(root_path)
-    content = []
-    for file in os.listdir(root_path):
-        new_path = os.path.join(root_path, file)
-        if os.path.isfile(new_path):
-            content.append(new_path)
-            continue
-        
-        content += scandir(new_path)
+def add_remaining_edges(edges: List[Tuple[int, int]]) -> List[Tuple[int,int]]:
+    """Add for each (x,y) edge a new edge (y,x) if it is not already present"""
+    for idx, e in enumerate(edges):
+        x, y = e
+        if (y, x) not in edges and [y, x] not in edges:
+            edges.insert(idx + 1, (y, x))
     
-    return content
+    return edges
 
 
-def download_zipped_data(url: str, path2extract: str, dataset_name: str, logger: logging.Logger) -> List[str]:
-    """Download and extract a ZIP file from URL. Return the content filename"""
-    logger.debug(f"--- Downloading from {url} ---")
-    response = requests.get(url)
+def graph2data(graph: nx.Graph, target: str | int, edges: List[Tuple[int, int]]) -> gdata.Data:
+    """From a networkx.Graph returns a torch_geometric.data.Data"""
+    # Retrieve nodes attributes
+    attrs = sorted(list(graph.nodes(data=True)), key=lambda x: x[0])
+    x = torch.tensor([list(map(int, a.values())) for _, a in attrs], dtype=torch.float)
+    
+    edges = add_remaining_edges(edges)
+    edge_index = torch.tensor([list(e) for e in edges], dtype=torch.long) \
+                        .t()                                                  \
+                        .contiguous()                                         \
+                        .long()
 
-    abs_path2extract = os.path.abspath(path2extract)
-    zip_path = os.path.join(abs_path2extract, f"{dataset_name}.zip")
-    with open(zip_path, mode="wb") as iofile:
-        iofile.write(response.content)
+    # Retrieve ground trouth labels
+    y = torch.tensor([int(target)], dtype=torch.long)
 
-    # Extract the file
-    logger.debug("--- Extracting files from the archive ---")
-    with zipfile.ZipFile(zip_path, mode="r") as zip_ref:
-        zip_ref.extractall(abs_path2extract)
+    return gdata.Data(x=x, edge_index=edge_index, y=y)
 
-    logger.debug(f"--- Removing {zip_path} ---")
-    os.remove(zip_path)
 
-    return scandir(os.path.join(path2extract, dataset_name))
+def data2graph(data: gdata.Data) -> nx.DiGraph:
+    """From a torch_geometric.data.Data to networkx.Graph"""
+    attrs = data.x.tolist()
+    nodes = torch.hstack((data.edge_index[0], data.edge_index[1])).unique().tolist()
+
+    attrs_nodes = []
+    for i, node in enumerate(nodes):
+        attrs_nodes.append((node, {f"attr{j}" : attr for j, attr in enumerate(attrs[i])}))
+    
+    edges = list(map(tuple, data.edge_index.transpose(0,1).tolist()))
+    g = nx.DiGraph()
+    g.add_nodes_from(attrs_nodes)
+    g.add_edges_from(edges)
+
+    return g
+
+
+#######################################################
+################## GENERAL UTILITIES ##################
+#######################################################
 
 
 def configure_logger(file_logging: bool=False, 
@@ -770,51 +893,6 @@ def cartesian_product(x: Sequence, y: Optional[Sequence]=None) -> Generator:
             yield (el_x, el_y)
 
 
-def add_remaining_edges(edges: List[Tuple[int, int]]) -> List[Tuple[int,int]]:
-    """Add for each (x,y) edge a new edge (y,x) if it is not already present"""
-    for idx, e in enumerate(edges):
-        x, y = e
-        if (y, x) not in edges and [y, x] not in edges:
-            edges.insert(idx + 1, (y, x))
-    
-    return edges
-
-
-def graph2data(graph: nx.Graph, target: str | int, edges: List[Tuple[int, int]]) -> gdata.Data:
-    """From a networkx.Graph returns a torch_geometric.data.Data"""
-    # Retrieve nodes attributes
-    attrs = sorted(list(graph.nodes(data=True)), key=lambda x: x[0])
-    x = torch.tensor([list(map(int, a.values())) for _, a in attrs], dtype=torch.float)
-    
-    edges = add_remaining_edges(edges)
-    edge_index = torch.tensor([list(e) for e in edges], dtype=torch.long) \
-                        .t()                                                  \
-                        .contiguous()                                         \
-                        .long()
-
-    # Retrieve ground trouth labels
-    y = torch.tensor([int(target)], dtype=torch.long)
-
-    return gdata.Data(x=x, edge_index=edge_index, y=y)
-
-
-def data2graph(data: gdata.Data) -> nx.DiGraph:
-    """From a torch_geometric.data.Data to networkx.Graph"""
-    attrs = data.x.tolist()
-    nodes = torch.hstack((data.edge_index[0], data.edge_index[1])).unique().tolist()
-
-    attrs_nodes = []
-    for i, node in enumerate(nodes):
-        attrs_nodes.append((node, {f"attr{j}" : attr for j, attr in enumerate(attrs[i])}))
-    
-    edges = list(map(tuple, data.edge_index.transpose(0,1).tolist()))
-    g = nx.DiGraph()
-    g.add_nodes_from(attrs_nodes)
-    g.add_edges_from(edges)
-
-    return g
-
-
 def get_all_labels(graphs: Dict[str, Tuple[nx.Graph, str]]) -> torch.Tensor:
     """ Return a list containings all labels of the dataset """
     return torch.tensor(list(set([int(v[1]) for _, v in graphs.items()])))
@@ -824,3 +902,15 @@ def compute_accuracy(vector_a: torch.Tensor, vector_b: torch.Tensor) -> float:
     """Compute the accuracy, i.e., the percentage of equal elements"""
     equals = torch.eq(vector_a, vector_b)
     return equals.sum() * 100 / vector_a.shape[0]
+
+
+def get_batch_number(databatch, i_batch, n_way, k_shot):
+    """From a N batch takes the i-th batch"""
+    dim_databatch = n_way * k_shot
+    indices = torch.arange(0, config.BATCH_PER_EPISODES)
+    return gdata.Batch.from_data_list(databatch[indices * dim_databatch + i_batch])
+
+
+def get_max_acc(accs, step, scores, min_step, test_step):
+    step = np.argmax(scores[min_step - 1 : test_step]) + min_step - 1
+    return accs[step]
