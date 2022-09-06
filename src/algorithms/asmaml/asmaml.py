@@ -143,6 +143,7 @@ class AdaptiveStepMAML(nn.Module):
             except AssertionError:
                 print("Logits: ", logits)
                 print("Score: ", score)
+                print(self.net.parameters())
                 print("Y: ", support_data.y)
                 print("Edge Index: ", support_data.edge_index)
                 print("X: ", support_data.x)

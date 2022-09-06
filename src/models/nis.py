@@ -5,22 +5,21 @@ from torch_scatter import scatter_add
 
 
 class NodeInformationScore(MessagePassing):
-    """Node information score"""
     def __init__(self, improved=False, cached=False, **kwargs):
-        super().__init__(aggr='add', **kwargs)
+        super(NodeInformationScore, self).__init__(aggr='add', **kwargs)
 
         self.improved = improved
         self.cached = cached
         self.cached_result = None
         self.cached_num_edges = None
-    
+
     @staticmethod
     def norm(edge_index, num_nodes, edge_weight, dtype=None):
         edge_index, _ = remove_self_loops(edge_index)
 
         if edge_weight is None:
-            edge_weight = torch.ones((edge_index.size(1), ), dtype=dtype, device=edge_index.device)
-        
+            edge_weight = torch.ones((edge_index.size(1),), dtype=dtype, device=edge_index.device)
+
         row, col = edge_index
         deg = scatter_add(edge_weight, row, dim=0, dim_size=num_nodes)
         deg_inv_sqrt = deg.pow(-0.5)
@@ -29,8 +28,8 @@ class NodeInformationScore(MessagePassing):
         edge_index, edge_weight = add_self_loops(edge_index, edge_weight, 0, num_nodes)
 
         row, col = edge_index
-        expand_deg = torch.zeros((edge_weight.size(0), ), dtype=dtype, device=edge_index.device)
-        expand_deg[-num_nodes:] = torch.ones((num_nodes, ), dtype=dtype, device=edge_index.device)
+        expand_deg = torch.zeros((edge_weight.size(0),), dtype=dtype, device=edge_index.device)
+        expand_deg[-num_nodes:] = torch.ones((num_nodes,), dtype=dtype, device=edge_index.device)
 
         return edge_index, expand_deg - deg_inv_sqrt[row] * edge_weight * deg_inv_sqrt[col]
 

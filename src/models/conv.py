@@ -6,9 +6,8 @@ from torch.nn import Parameter
 import torch.nn.functional as F
 from torch_scatter import scatter_add
 from torch_geometric.nn.conv import MessagePassing
-from torch_geometric.nn.inits import uniform
 from torch_geometric.utils import add_remaining_self_loops
-from models.utils import glorot, zeros
+from models.utils import glorot, zeros, uniform
 from models.linear import LinearModel
 
 
@@ -74,8 +73,6 @@ class GCNConv(MessagePassing):
 
         row, col = edge_index
 
-        # src = edge_weight
-        # index = row
         deg = scatter_add(edge_weight, row, dim=0, dim_size=num_nodes)
         deg_inv_sqrt = deg.pow(-0.5)
         deg_inv_sqrt[deg_inv_sqrt == float('inf')] = 0
@@ -175,10 +172,10 @@ class SAGEConv(MessagePassing):
             weight = self.weight
 
         if torch.is_tensor(x):
-            x = x @ weight
+            x = torch.matmul(x, weight)
         else:
-            x0 = None if x[0] is None else x[0] @ weight
-            x1 = None if x[1] is None else x[1] @ weight
+            x0 = None if x[0] is None else torch.matmul(x[0], weight)
+            x1 = None if x[1] is None else torch.matmul(x[1], weight)
             x = (x0, x1)
     
         return self.propagate(edge_index, size=size, x=x, edge_weight=edge_weight)

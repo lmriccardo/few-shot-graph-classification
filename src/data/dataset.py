@@ -310,16 +310,16 @@ def random_mapping_heuristic(graphs: GraphDataset) -> List[Tuple[nx.Graph, str]]
     
     # Iterate over all graphs
     for _, ds_element in graphs.graphs_ds.items():
-        current_graph, label, gedges = ds_element
+        current_graph, label, edges = ds_element
 
         # Takes all edges
-        e_cdel = current_graph.edges()
+        e_cdel = edges
 
         # Takes every pair of nodes that is not an edge
         e_cadd = []
         for node_x, node_y in cartesian_product(current_graph.nodes()):
             if node_x != node_y and (node_x, node_y) not in e_cdel:
-                e_cadd.append((node_x, node_y))
+                e_cadd.append([node_x, node_y])
         
         if not e_cadd:
             continue
@@ -330,15 +330,15 @@ def random_mapping_heuristic(graphs: GraphDataset) -> List[Tuple[nx.Graph, str]]
 
         # Remove and add edges
         for e in e_del:
-            gedges.remove(e)
+            edges.remove(e)
         
-        gedges.extend(e_add)
+        edges.extend(e_add)
         
         # Let's do a deepcopy to not modify the original graph
         g = deepcopy(current_graph)
         g.remove_edges_from(e_del)
         g.add_edges_from(e_add)
-        new_graphs.append((g, label, gedges))
+        new_graphs.append((g, label, edges))
     
     return new_graphs
 

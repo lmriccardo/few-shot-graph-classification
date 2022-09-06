@@ -128,8 +128,6 @@ class FewShotDataLoaderPaper:
 
         node_attr = np.vstack(node_attr)
 
-        print("Paper Mapping: ", mapping)
-
         return [torch.from_numpy(node_attr).float(),
                 torch.from_numpy(np.array(edge_index)).long(),
                 torch.from_numpy(np.array(graph_indicator)).long()]
@@ -138,8 +136,6 @@ class FewShotDataLoaderPaper:
         classes = self.sample_classes()
         support_graphs, query_graphs, support_labels, query_labels = self.sample_graphs_id(
             classes)
-
-        print("Ciao ", support_graphs, " ", idx, " ", support_labels, " ", classes)
 
         support_data = self.sample_graph_data(support_graphs)
         support_labels = torch.from_numpy(support_labels).long()
@@ -156,9 +152,9 @@ class FewShotDataLoaderPaper:
         return support_data, query_data
 
     def get_iterator(self, epoch: int = 0):
-        #rand_seed = epoch
-        #random.seed(rand_seed)
-        #np.random.seed(rand_seed)
+        rand_seed = epoch
+        random.seed(rand_seed)
+        np.random.seed(rand_seed)
 
         tnt_dataset = tnt.dataset.ListDataset(
             elem_list=range(self.epoch_size), load=self.load_function
