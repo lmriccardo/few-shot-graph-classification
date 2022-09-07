@@ -4,7 +4,7 @@ import math
 def glorot(tensor):
     """Apply the Glorot NN initialization (also called Xavier)"""
     if tensor is not None:
-        stdv = math.sqrt(6.0 / (tensor.size(-2) + tensor.size(-1)))
+        stdv = math.sqrt(2) * math.sqrt(6.0 / (tensor.size(-2) + tensor.size(-1)))
         tensor.data.uniform_(-stdv, stdv)
 
 

@@ -183,81 +183,6 @@ def elapsed_time(func):
         logging.debug("Elapsed Time: {:.6f}".format(end - start))
     
     return wrapper
-    
-def delete_data_folder(path2delete: str) -> None:
-    """Delete the folder containing data"""
-    logging.debug("--- Removing Content Data ---")
-    shutil.rmtree(path2delete)
-    logging.debug("--- Removed Finished Succesfully ---")
-
-
-def scandir(root_path: str) -> List[str]:
-    """Recursively scan a directory looking for files"""
-    root_path = os.path.abspath(root_path)
-    content = []
-    for file in os.listdir(root_path):
-        new_path = os.path.join(root_path, file)
-        if os.path.isfile(new_path):
-            content.append(new_path)
-            continue
-        
-        content += scandir(new_path)
-    
-    return content
-
-
-def download_zipped_data(url: str, path2extract: str, dataset_name: str, logger: logging.Logger) -> List[str]:
-    """Download and extract a ZIP file from URL. Return the content filename"""
-    logger.debug(f"--- Downloading from {url} ---")
-    response = requests.get(url)
-
-    abs_path2extract = os.path.abspath(path2extract)
-    zip_path = os.path.join(abs_path2extract, f"{dataset_name}.zip")
-    with open(zip_path, mode="wb") as iofile:
-        iofile.write(response.content)
-
-    # Extract the file
-    logger.debug("--- Extracting files from the archive ---")
-    with zipfile.ZipFile(zip_path, mode="r") as zip_ref:
-        zip_ref.extractall(abs_path2extract)
-
-    logger.debug(f"--- Removing {zip_path} ---")
-    os.remove(zip_path)
-
-    return scandir(os.path.join(path2extract, dataset_name))
-
-
-def setup_seed(seed=42):
-    random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    np.random.seed(seed)
-    torch.backends.cudnn.deterministic = True
-
-
-def save_with_pickle(path2save: str, content: Any) -> None:
-    """Save content inside a .pickle file denoted by path2save"""
-    path2save = path2save + ".pickle" if ".pickle" not in path2save else path2save
-    with open(path2save, mode="wb") as iostream:
-        pickle.dump(content, iostream)
-
-
-def load_with_pickle(path2load: str) -> Any:
-    """Load a content from a .pickle file"""
-    with open(path2load, mode="rb") as iostream:
-        return pickle.load(iostream)
-
-
-def elapsed_time(func):
-    """Just a simple wrapper for counting elapsed time from start to end"""
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        start = time.time()
-        func(*args, **kwargs)
-        end = time.time()
-        logging.debug("Elapsed Time: {:.6f}".format(end - start))
-    
-    return wrapper
 
 
 ######################################################################
@@ -722,30 +647,25 @@ def data_batch_collate(data_list: List[gdata.Data]) -> Tuple[gdata.Data, List[gd
     return data_batch, data_list
 
 
-def task_sampler_uncollate(task_sampler: 'data.sampler.TaskBatchSampler', data_batch: gdata.Batch) -> Tuple[
-    gdata.Data, List[gdata.Data], gdata.Data, List[gdata.Data]
+def task_sampler_uncollate(task_sampler: 'TaskBatchSampler', 
+                           data_batch  : List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]] ) -> Tuple[
+    List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]], List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]
 ]:
     """
     Takes as input the task sampler and a batch containing both the 
     support and the query set. It returns two different DataBatch
     respectively for support and query_set.
-
     Assume L = [x1, x2, x3, ..., xN] is the data_batch
     each xi is a graph. Moreover, we have that
     L[0:K] = support sample for the first class
     L[K+1:K+Q] = query sample for the first class
     In general, we have that 
-
             L[i * (K + Q) : (i + 1) * (K + Q)]
-
     is the (support, query) pair for the i-th class
     Finally, the first batch is the one that goes from
     L[0 : N * (K + Q)], so
-
             L[i * N * (K + Q) : (i + 1) * N * (K + Q)]
-
     is the i-th batch.
-
     :param task_sampler: The task sampler
     :param data_batch: a batch with support and query set
     :return: support batch, query batch
@@ -789,12 +709,7 @@ def task_sampler_uncollate(task_sampler: 'data.sampler.TaskBatchSampler', data_b
             support_data_batch += support_data
             query_data_batch += query_data
     
-    # Rename the edges
-    support_data, support_data_list = data_batch_collate(rename_edge_indexes(support_data_batch))
-    query_data, query_data_list     = data_batch_collate(rename_edge_indexes(query_data_batch))
-
-    # Create new DataBatchs and return
-    return support_data, support_data_list, query_data, query_data_list
+    return support_data_batch, query_data_batch
 
 
 def add_remaining_edges(edges: List[Tuple[int, int]]) -> List[Tuple[int,int]]:
@@ -823,24 +738,38 @@ def graph2data(graph: nx.Graph, target: str | int, edges: List[Tuple[int, int]])
     y = torch.tensor([int(target)], dtype=torch.long)
 
     return gdata.Data(x=x, edge_index=edge_index, y=y)
-
-
-def data2graph(data: gdata.Data) -> nx.DiGraph:
-    """From a torch_geometric.data.Data to networkx.Graph"""
-    attrs = data.x.tolist()
-    nodes = torch.hstack((data.edge_index[0], data.edge_index[1])).unique().tolist()
-
-    attrs_nodes = []
-    for i, node in enumerate(nodes):
-        attrs_nodes.append((node, {f"attr{j}" : attr for j, attr in enumerate(attrs[i])}))
     
-    edges = list(map(tuple, data.edge_index.transpose(0,1).tolist()))
-    g = nx.DiGraph()
-    g.add_nodes_from(attrs_nodes)
-    g.add_edges_from(edges)
 
-    return g
+def to_nxgraph(graph_data: Dict[str, Any] | gdata.Data, directed: bool=True) -> nx.Graph:
+    """Return a networkx.Graph representation of the input graph"""
+    if isinstance(graph_data, dict):
+        nodes = graph_data["nodes"]
+        attributes = graph_data["attributes"]
+        edges = graph_data["edges"]
 
+    elif isinstance(graph_data, gdata.Data):
+        attributes = graph_data.x.tolist()
+        nodes = torch.hstack((graph_data.edge_index[0], graph_data.edge_index[1])).unique().tolist()
+        edges = list(map(tuple, graph_data.edge_index.transpose(0,1).tolist()))
+
+    nodes_attributes = []
+    for node_i, node in enumerate(nodes):
+        nodes_attributes.append((node, {f"attr{i}" : attr for i, attr in enumerate(attributes[node_i])}))
+
+    graph = nx.DiGraph() if directed else nx.Graph()
+    graph.add_nodes_from(nodes_attributes)
+    graph.add_edges_from(edges)
+
+    return graph
+
+
+def to_pygdata(graph_data: Dict[str, Any], label: str | int) -> gdata.Data:
+    """Return a torch_geometric.data.Data representation of the graph"""
+    x = torch.tensor(graph_data["attributes"], dtype=torch.float)
+    edge_index = torch.tensor(graph_data["edges"], dtype=torch.long).t().contiguous()
+    y = torch.tensor([label], dtype=torch.long)
+    return gdata.Data(x=x, edge_index=edge_index, y=y)
+    
 
 #######################################################
 ################## GENERAL UTILITIES ##################
@@ -916,3 +845,17 @@ def get_batch_number(databatch, i_batch, n_way, k_shot):
 def get_max_acc(accs, step, scores, min_step, test_step):
     step = np.argmax(scores[min_step - 1 : test_step]) + min_step - 1
     return accs[step]
+
+
+def build_adjacency_matrix(graph_data: Dict[str, Any]) -> torch.Tensor:
+    """Construct the adjacency matrix of a graph"""
+    number_of_nodes = len(graph_data["nodes"])
+    node_mapping = dict(zip(graph_data["nodes"], range(number_of_nodes)))
+    adj_matrix = torch.zeros((number_of_nodes, number_of_nodes), dtype=torch.int)
+
+    for node_x, node_y in graph_data["edges"]:
+        node_x = node_mapping[node_x]
+        node_y = node_mapping[node_y]
+        adj_matrix[node_x, node_y] = 1
+    
+    return adj_matrix

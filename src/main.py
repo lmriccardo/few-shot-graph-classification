@@ -344,8 +344,8 @@ def func2():
 
 
 if __name__ == "__main__":
-    # asmaml()
+    asmaml()
     # m_evolve()
-    run_paper()
+    # run_paper()
     # func()
     # func2()

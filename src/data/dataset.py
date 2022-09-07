@@ -1,45 +1,40 @@
 import torch
-import torch_geometric.data as gdata
+import torch_geometric.data as pyg_data
 
-from utils.utils import download_zipped_data, \
-    load_with_pickle, \
-    cartesian_product, \
-    graph2data, \
-    data_batch_collate, \
-    rename_edge_indexes
-import config
+from torch.utils.data import Dataset
+from utils.utils import rename_edge_indexes,    \
+                        data_batch_collate,     \
+                        load_with_pickle,       \
+                        cartesian_product,      \
+                        build_adjacency_matrix, \
+                        to_nxgraph
 
-from typing import Any, Dict, List, Optional, Tuple, Union
-from networkx.algorithms.link_prediction import resource_allocation_index
+from typing import Dict, Any, List, Union, Tuple, Optional
+from collections import defaultdict
 from copy import deepcopy
 from numpy.linalg import matrix_power
-from collections import defaultdict
+from networkx.algorithms.link_prediction import resource_allocation_index
 
-import networkx as nx
 import logging
 import os
-import random
-import math
+import config
 import numpy as np
-import numpy.random as np_random
+import math
+import random
 
 
-class GraphDataset(gdata.Dataset):
-    def __init__(self, graphs_ds: Dict[str, Tuple[nx.Graph, str]]) -> None:
+class GraphDataset(Dataset):
+    """Graph dataset"""
+    def __init__(self, graph_ds: Dict[str, Dict[str, Any]]) -> None:
         super(GraphDataset, self).__init__()
-        self.graphs_ds = graphs_ds
+        self.graph_ds = graph_ds
         self.count_per_class = dict()
-
+    
     @classmethod
-    def get_dataset(cls, attributes: List[Any], data: Dict[str, Any], num_features: int=1) -> 'GraphDataset':
+    def get_dataset(cls, attributes  : List[Any], 
+                         data        : Dict[str, Any], 
+                         num_features: int=1) -> 'GraphDataset':
         """
-        Returns a new instance of GraphDataset filled with graphs inside data. 'attributes'
-        is the list with all the attributes (not only those beloging to nodes in 'data').
-
-        :param data: a dictionary with label2graphs, graph2nodes and graph2edges
-        :param attributes: a list with node attributes
-        :param num_features: the number of features of a node
-        :return: a new instance of GraphDataset
         """
         graphs = dict()
 
@@ -48,7 +43,7 @@ class GraphDataset(gdata.Dataset):
         graph2edges  = data["graph2edges"]
 
         count_per_class = defaultdict(int)
-
+        graph_counter = 0
         for label, graph_list in label2graphs.items():
             for graph_id in graph_list:
                 graph_nodes = graph2nodes[graph_id]
@@ -60,20 +55,18 @@ class GraphDataset(gdata.Dataset):
                         attribute = [attribute]
                     
                     nodes_attributes.append(attribute)
-                    
-                nodes = []
-                for node, attribute in zip(graph_nodes, nodes_attributes):
-                    nodes.append((node, {f"attr{i}" : a for i, a in enumerate(attribute)}))
+                
+                graph_data = {
+                    "nodes" : graph_nodes,
+                    "edges" : graph_edges,
+                    "attributes" : [list(map(float, x)) for x in nodes_attributes]
+                }
 
-                g = nx.Graph()
-
-                g.add_edges_from(graph_edges)
-                g.add_nodes_from(nodes)
-            
-                graphs[graph_id] = (g, label, graph_edges)
+                graphs[graph_counter] = (graph_data, label)
+                graph_counter += 1
             
             count_per_class[label] += len(graph_list)
-
+        
         graphs = dict(sorted(graphs.items(), key=lambda x: x[0]))
         graph_dataset = super(GraphDataset, cls).__new__(cls)
         graph_dataset.__init__(graphs)
@@ -81,91 +74,91 @@ class GraphDataset(gdata.Dataset):
 
         return graph_dataset
 
-    def __repr__(self) -> str:
-        return f"GraphDataset(classes={set(self.targets().tolist())},n_graphs={self.len()})"
-
-    def indices(self) -> List[str]:
-        """ Return all the graph IDs """
-        return list(self.graphs_ds.keys())
-
-    def len(self) -> int:
-        return len(self.graphs_ds.keys())
-
-    def get_classes(self) -> List[int]:
-        """Return all labels one time"""
-        return list(self.count_per_class.keys())
-
-    def targets(self) -> torch.Tensor:
-        """ Return all the labels """
-        targets = []
-        for _, graph in self.graphs_ds.items():
-            targets.append(int(graph[1]))
-
-        return torch.tensor(targets)
+    def __len__(self) -> int:
+        """Return the lenght of the dataset as a number of graphs"""
+        return len(self.graph_ds)
     
-    def number_of_classes(self) -> int:
-        """Return the total number of classes"""
-        return len(self.get_classes())
+    def __repr__(self) -> str:
+        """Return a description of the dataset"""
+        return f"{self.__class__.__name__}(classes={set(self.classes)},n_graphs={self.__len__()})"
 
-    def get(self, idx: Union[int, str]) -> gdata.Data:
-        """ Return (Graph object, Adjacency matrix and label) of a graph """
+    def __add__(self, other: Union['GraphDataset', List[Tuple[Dict[str, Any], str]]]) -> 'GraphDataset':
+        """Create a new graph dataset as the sum of the current and the input given dataset"""
+        last_id = max(self.__len__()) + 1
+        if isinstance(other, GraphDataset):
+            other = list(other.graph_ds.values())
+        
+        data_dict = deepcopy(self.graph_ds)
+        for elem in other:
+            data_dict[last_id] = elem
+            last_id += 1
+        
+        new_ds = GraphDataset(data_dict)
+        new_ds.count_per_class = GraphDataset._count_per_class(new_ds)
+        return new_ds
+
+    def __iadd__(self, other: Union['GraphDataset', List[Tuple[Dict[str, Any], str]]]) -> 'GraphDataset':
+        return self.__add__(other)
+
+    def __getitem__(self, idx: int | str) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         if isinstance(idx, str):
             idx = int(idx)
 
-        graph = self.graphs_ds[idx]
-        g, label, edges = graph[0], graph[1], graph[2]
+        g_data, label = self.graph_ds[idx]
+        x = torch.tensor(g_data["attributes"], dtype=torch.float)
+        edge_index = torch.tensor(g_data["edges"], dtype=torch.long).t().contiguous()
+        y = torch.tensor([label], dtype=torch.long)
 
-        data = graph2data(g, label, edges)
-
-        return data
-
-    def get_graphs_per_label(self) -> Dict[str, List[nx.Graph]]:
-        """Return a dictionary (label, list_of_graph with that label)"""
-        graphs_per_label = {target : [] for target in self.get_classes()}
-        for _, (g, label, e) in self.graphs_ds.items():
-            graphs_per_label[label].append((g, e))
-        
-        return graphs_per_label
-
-    def to_data(self) -> Tuple[gdata.Data, List[gdata.Data]]:
-        """Return the torch_geometric.data.Data format of the entire dataset"""
-        data_list = [graph2data(graph, label, edges) for _, (graph, label, edges) in self.graphs_ds.items()]
-        data, new_data_list = data_batch_collate(rename_edge_indexes(data_list))
-        return data, new_data_list
+        return (x, edge_index, y)
     
     @staticmethod
     def _count_per_class(graph_ds: 'GraphDataset') -> Dict[str, int]:
         """Create a dictionary for count_per_class attribute"""
         count_per_class = defaultdict(int)
-        for _, (_, label, _) in graph_ds.graphs_ds.items():
+        for _, (_, label) in graph_ds.graph_ds.items():
             count_per_class[label] += 1
         
         return count_per_class
     
-    def __add__(self, other: Union['GraphDataset', List[Tuple[nx.Graph, str]]]) -> 'GraphDataset':
-        """Create a new graph dataset as the sum of the current and the input given dataset"""
-        last_id = max(list(self.graphs_ds.keys())) + 1
-        if isinstance(other, GraphDataset):
-            other = list(other.graphs_ds.values())
+    @property
+    def classes(self) -> List[int | str]:
+        """Return the total list of classes in the dataset"""
+        return list(self.count_per_class.keys())
 
-        data_dict = deepcopy(self.graphs_ds)
-        for elem in other:
-            data_dict[last_id] = elem
-            last_id += 1
-
-        new_ds = GraphDataset(data_dict)
-        new_ds.count_per_class = GraphDataset._count_per_class(new_ds)
-        return new_ds
+    @property
+    def number_of_classes(self) -> int:
+        """Return the total number of classes"""
+        return len(self.count_per_class)
     
-    def __iadd__(self, other: Union['GraphDataset', List[Tuple[nx.Graph, str]]]) -> 'GraphDataset':
-        return self.__add__(other)
+    def targets(self) -> torch.Tensor:
+        """Returns for each graph its correspective class (with duplicate)"""
+        return torch.tensor([int(label) for _, (_, label) in self.graph_ds.items()], dtype=torch.long)
+
+    def get_graphs_per_label(self) -> Dict[str, List[Any]]:
+        """Return a dictionary (label, list_of_graph with that label)"""
+        graphs_per_label = {target : [] for target in self.classes}
+        for _, (g_data, label) in self.graph_ds.items():
+            graphs_per_label[label].append(g_data)
+        
+        return graphs_per_label
+
+    def to_data(self) -> Tuple[pyg_data.Data, List[pyg_data.Data]]:
+        """Return the entire dataset as a torch_geometric.data.Data"""
+        data_list = []
+        for _, (g_data, label) in self.graph_ds.items():
+            x = torch.tensor(g_data["attributes"], dtype=torch.long)
+            edge_index = torch.tensor(g_data["edges"], dtype=torch.long).t().contiguous()
+            data = pyg_data.Data(x=x, edge_index=edge_index, y=torch.tensor([label], dtype=torch.long))
+            data_list.append(data)
+        
+        dataset_data = data_batch_collate(rename_edge_indexes(data_list))
+        return dataset_data, data_list
 
 
 def generate_train_val_test(dataset_name: str,
                             logger: logging.Logger,
                             data_dir: Optional[str]=None, 
-                            download: bool=True,
-                            download_folder: str="../data"
+                            download: bool=True
 ) -> Tuple[GraphDataset, GraphDataset, GraphDataset]:
     """ Return dataset for training, validation and testing """
     logger.debug("--- Generating Train, Test and Validation datasets --- ")
@@ -182,15 +175,6 @@ def generate_train_val_test(dataset_name: str,
         test_file = os.path.join(data_dir, f"{dataset_name}/{dataset_name}_test_set.pickle")
         train_file = os.path.join(data_dir, f"{dataset_name}/{dataset_name}_train_set.pickle")
         val_file = os.path.join(data_dir, f"{dataset_name}/{dataset_name}_val_set.pickle")
-
-    if download:
-        node_attribute, test_file, train_file, val_file = download_zipped_data(
-            config.DATASETS[dataset_name], 
-            download_folder, 
-            dataset_name
-        )
-
-        data_dir = "\\".join(node_attribute.replace("\\", "/").split("/")[:-2])
 
     node_attribute_data = load_with_pickle(node_attribute)
     if isinstance(node_attribute_data, np.ndarray | torch.Tensor):
@@ -253,8 +237,8 @@ def split_dataset(dataset: GraphDataset, n_sample: int=2, **kwargs) -> List[Grap
             graph_list += graph_elem
             start_sampling_idx[label] += to_sample
         
-        for (g, e), label in graph_list:
-            graph_dict[graph_id] = (g, label, e)
+        for g_data, label in graph_list:
+            graph_dict[graph_id] = (g_data, label)
             graph_id += 1
         
         new_ds = GraphDataset(graph_dict)
@@ -274,9 +258,9 @@ def get_dataset_from_labels(dataset: GraphDataset, labels: List[str | int]) -> G
     :return: a new dataset
     """
     graph_ds = dict()
-    for graph_id, (g, label, e) in dataset.graphs_ds.items():
+    for graph_id, (g, label) in dataset.graphs_ds.items():
         if label in labels or str(label) in labels:
-            graph_ds[graph_id] = (g, label, e)
+            graph_ds[graph_id] = (g, label)
     
     new_dataset = GraphDataset(graph_ds)
     new_dataset.count_per_class = GraphDataset._count_per_class(new_dataset)
@@ -287,7 +271,7 @@ def get_dataset_from_labels(dataset: GraphDataset, labels: List[str | int]) -> G
 ############################### ML-EVOLVE HEURISTICS ################################
 #####################################################################################
 
-def random_mapping_heuristic(graphs: GraphDataset) -> List[Tuple[nx.Graph, str]]:
+def random_mapping_heuristic(graphs: GraphDataset) -> List[Tuple[Dict[str, Any], str]]:
     """
     Random mapping is the first baseline heuristics used in the
     ML-EVOLVE graph data augmentation technique, shown in the 
@@ -310,40 +294,39 @@ def random_mapping_heuristic(graphs: GraphDataset) -> List[Tuple[nx.Graph, str]]
     
     # Iterate over all graphs
     for _, ds_element in graphs.graphs_ds.items():
-        current_graph, label, edges = ds_element
+        current_graph_data, label = ds_element
 
         # Takes all edges
-        e_cdel = edges
+        e_cdel = current_graph_data["edges"]
 
         # Takes every pair of nodes that is not an edge
         e_cadd = []
-        for node_x, node_y in cartesian_product(current_graph.nodes()):
+        for node_x, node_y in cartesian_product(current_graph_data["nodes"]):
             if node_x != node_y and (node_x, node_y) not in e_cdel:
                 e_cadd.append([node_x, node_y])
+                e_cadd.append([node_y, node_x])
         
         if not e_cadd:
             continue
         
         # Then we have to sample
-        e_add = random.sample(e_cadd, k=math.ceil(current_graph.number_of_edges() * config.BETA))
-        e_del = random.sample(e_cdel, k=math.ceil(current_graph.number_of_edges() * config.BETA))
+        number_of_edges = len(current_graph_data["edges"])
+        e_add = random.sample(e_cadd, k=math.ceil(number_of_edges * config.BETA))
+        e_del = random.sample(e_cdel, k=math.ceil(number_of_edges * config.BETA))
 
         # Remove and add edges
         for e in e_del:
-            edges.remove(e)
+            current_graph_data["edges"].remove(e)
         
-        edges.extend(e_add)
+        current_graph_data["edges"].extend(e_add)
         
         # Let's do a deepcopy to not modify the original graph
-        g = deepcopy(current_graph)
-        g.remove_edges_from(e_del)
-        g.add_edges_from(e_add)
-        new_graphs.append((g, label, edges))
+        new_graphs.append((current_graph_data, label))
     
     return new_graphs
 
 
-def motif_similarity_mapping_heuristic(graphs: GraphDataset) -> List[Tuple[nx.Graph, str]]:
+def motif_similarity_mapping_heuristic(graphs: GraphDataset) -> List[Tuple[Dict[str, Any], str]]:
     """
     Motif-similarity mapping is the second heuristics for new 
     data generation, presented in https://dl.acm.org/doi/pdf/10.1145/3340531.3412086 
@@ -380,11 +363,13 @@ def motif_similarity_mapping_heuristic(graphs: GraphDataset) -> List[Tuple[nx.Gr
 
     # Iterate over all graphs
     for _, ds_element in graphs.graphs_ds.items():
-        current_graph, label, gedges = ds_element
+        current_graph_data, label = ds_element
+        number_of_nodes = len(current_graph_data["nodes"])
+        number_of_edges = len(current_graph_data["edges"])
 
         # First of all let's define a mapping from graph's nodes and
         # their indexes in the adjacency matrix, so also for a the reverse mapping
-        node_mapping = dict(zip(current_graph.nodes(), range(current_graph.number_of_nodes())))
+        node_mapping = dict(zip(current_graph_data["nodes"], range(number_of_nodes)))
         reverse_node_mapping = {v : k for k, v in node_mapping.items()}
 
         # Then we need the adjancency matrix and its squared power
@@ -392,12 +377,12 @@ def motif_similarity_mapping_heuristic(graphs: GraphDataset) -> List[Tuple[nx.Gr
         # (i, j): A[i,j] = deg(i) if i = j, otherwise it shows if
         # there exists a path of lenght 2 that connect i with j. In
         # this case the value of the cell is A[i,j] = 1, 0 otherwise.
-        adj_matrix = nx.adjacency_matrix(current_graph).todense()
+        adj_matrix = build_adjacency_matrix(current_graph_data).numpy()
         power_2_adjancency = matrix_power(adj_matrix, 2)
         
         # The first step of the algorithm is to compute E_cadd
         e_cadd = []
-        for node_x, node_y in cartesian_product(current_graph.nodes()):
+        for node_x, node_y in cartesian_product(current_graph_data["nodes"]):
 
             # mapping is needed to index the adjancency matrix
             node_x, node_y = node_mapping[node_x], node_mapping[node_y]
@@ -408,6 +393,7 @@ def motif_similarity_mapping_heuristic(graphs: GraphDataset) -> List[Tuple[nx.Gr
             if adj_matrix[node_x,node_y] == 0 and power_2_adjancency[node_x,node_y] != 0 \
                 and node_x != node_y and (node_y, node_x) not in e_cadd:
                 e_cadd.append((reverse_node_mapping[node_x], reverse_node_mapping[node_y]))
+                e_cadd.append((reverse_node_mapping[node_y], reverse_node_mapping[node_x]))
 
         possible_triads = dict()
         rai_dict = dict()
@@ -419,7 +405,7 @@ def motif_similarity_mapping_heuristic(graphs: GraphDataset) -> List[Tuple[nx.Gr
         # Here we can also compute the Resource Allocation Index.
         for (node_x, node_y) in e_cadd:
             node_x, node_y = node_mapping[node_x], node_mapping[node_y]
-            for node in current_graph.nodes():
+            for node in current_graph_data["nodes"]:
                 node = node_mapping[node]
                 if adj_matrix[node_x, node] + adj_matrix[node, node_y] == 2:
                     node_x = reverse_node_mapping[node_x]
@@ -427,14 +413,16 @@ def motif_similarity_mapping_heuristic(graphs: GraphDataset) -> List[Tuple[nx.Gr
                     node_y = reverse_node_mapping[node_y]
                     possible_triads[(node_x, node_y)] = [(node_x, node), (node, node_y)]
                     break
+            
+            nx_graph = to_nxgraph(current_graph_data)
 
-            rai = resource_allocation_index(current_graph, [(node_x, node_y)])
+            rai = resource_allocation_index(nx_graph, [(node_x, node_y)])
             _, _, rai = next(iter(rai))
             rai_dict[(node_x, node_y)] = rai
             total_rai_no_edges += rai
 
             edges = possible_triads[(node_x, node_y)]
-            for u, v, p in resource_allocation_index(current_graph, edges):
+            for u, v, p in resource_allocation_index(nx_graph, edges):
                 if (u, v) not in rai_dict:
                     rai_dict[(u, v)] = p
 
@@ -445,12 +433,12 @@ def motif_similarity_mapping_heuristic(graphs: GraphDataset) -> List[Tuple[nx.Gr
             if (node_x, node_y) in e_cadd:
                 w_add[(node_x, node_y)] = rai_dict[(node_x, node_y)] / total_rai_no_edges
 
-        e_add_sample_number = math.ceil(current_graph.number_of_edges() * config.BETA)
+        e_add_sample_number = math.ceil(number_of_edges * config.BETA)
 
         idxs = list(range(0, len(e_cadd)))
         p_distribution = list(w_add.values())
 
-        choices = np_random.choice(idxs, size=e_add_sample_number, p=p_distribution, replace=False)
+        choices = np.random.choice(idxs, size=e_add_sample_number, p=p_distribution, replace=False)
         e_add = np.array(e_cadd)[choices].tolist()
         e_add = list(map(tuple, e_add))
 
@@ -473,20 +461,17 @@ def motif_similarity_mapping_heuristic(graphs: GraphDataset) -> List[Tuple[nx.Gr
 
         # Remove and add edges
         for e in e_del:
-            gedges.remove(e)
+            current_graph_data["edges"].remove(e)
         
-        gedges.extend(e_add)
+        current_graph_data["edges"].extend(e_add)
 
         # The last step is to construct the new graph
-        g = deepcopy(current_graph)
-        g.remove_edges_from(e_del)
-        g.add_edges_from(e_add)
-        new_graphs.append((g, label, gedges))
+        new_graphs.append((current_graph_data, label))
     
     return new_graphs
 
 
-def augment_dataset(dataset: GraphDataset, heuristic: str="random mapping") -> List[Tuple[nx.Graph, str]]:
+def augment_dataset(dataset: GraphDataset, heuristic: str="random mapping") -> List[Tuple[Dict[str,Any], str]]:
     """Apply the augmentation to the dataset"""
     heuristics = {
         "random_mapping"           : random_mapping_heuristic,

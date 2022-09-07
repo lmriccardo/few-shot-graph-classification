@@ -1,33 +1,40 @@
-from typing import List, Generic, Optional
-from config import T
+import torch_geometric.data as pyg_data
+
 from torch.utils.data import DataLoader
-import torch_geometric.loader as gloader
-from data.dataset import GraphDataset
+from utils.utils import data_batch_collate, rename_edge_indexes, task_sampler_uncollate
 from data.sampler import TaskBatchSampler
-from utils.utils import data_batch_collate, rename_edge_indexes
+from data.dataset import GraphDataset
+from typing import Generic, Tuple, List, Optional, Iterator
+from config import T
+from functools import partial
 
 
-class GraphCollater(gloader.dataloader.Collater):
-    def __init__(self, *args) -> None:
-        super(GraphCollater, self).__init__(*args)
+def _collate(_batch: Generic[T]) -> Tuple[pyg_data.Data, List[pyg_data.Data]]:
+    data_list = []
 
-    def __call__(self, batch: Generic[T]) -> Generic[T]:
-        elem = batch[0]
-        if isinstance(elem, GraphDataset):
-            return self(elem)
+    for element in _batch:
+        element_x = element[0]
+        element_edge_index = element[1]
+        element_label = element[2]
 
-        return super(GraphCollater, self).__call__(batch)
-        
+        # Create single data for datalist
+        single_data = pyg_data.Data(x=element_x, edge_index=element_edge_index, y=element_label)
+        data_list.append(single_data)
+
+    return data_batch_collate(rename_edge_indexes(data_list))
+
+
+def graph_collator(batch: Generic[T], sampler: TaskBatchSampler) -> Generic[T]:
+    """collator"""
+    support_data_batch, query_data_batch = task_sampler_uncollate(sampler, batch)
+    return _collate(support_data_batch), _collate(query_data_batch)
+
 
 class FewShotDataLoader(DataLoader):
-    """Custom few-shot sampler DataLoader for GraphDataset"""
-
-    def __init__(self, dataset: GraphDataset,
-                 batch_size: int = 1,
-                 shuffle: bool = False,
-                 follow_batch: Optional[List[str]] = None,
-                 exclude_keys: Optional[List[str]] = None,
-                 **kwargs) -> None:
+    def __init__(self, dataset     : GraphDataset,
+                       follow_batch: Optional[List[str]] = None,
+                       exclude_keys: Optional[List[str]] = None,
+                       **kwargs) -> None:
 
         if 'collate_fn' in kwargs:
             del kwargs["collate_fn"]
@@ -35,21 +42,21 @@ class FewShotDataLoader(DataLoader):
         self.follow_batch = follow_batch
         self.exclude_keys = exclude_keys
 
-        # Take the batch sampler
         self.batch_sampler = kwargs["batch_sampler"]
 
         super().__init__(
             dataset,
-            batch_size,
-            shuffle,
-            collate_fn=GraphCollater(follow_batch, exclude_keys),
+            collate_fn=partial(graph_collator, sampler=self.batch_sampler),
             **kwargs,
         )
+    
+    def __iter__(self) -> Iterator[Tuple[
+        pyg_data.Data, List[pyg_data.Data], pyg_data.Data, List[pyg_data.Data]
+    ]]:
+        for data in super().__iter__():
+            (data1, data2), (data3, data4) = data
+            yield data1, data2, data3, data4
 
-    def __iter__(self):
-        for x in super().__iter__():
-            support_batch, support_data_list, query_batch, query_data_list = self.batch_sampler.uncollate(x)
-            yield support_batch, support_data_list, query_batch, query_data_list
 
 
 class GraphDataLoader(DataLoader):
@@ -72,18 +79,9 @@ class GraphDataLoader(DataLoader):
             dataset,
             batch_size,
             shuffle,
-            collate_fn=GraphCollater(follow_batch, exclude_keys),
+            collate_fn=_collate,
             **kwargs,
         )
-    
-    def __iter__(self):
-        for x in super().__iter__():
-            sample, sample_list = data_batch_collate(
-                rename_edge_indexes(
-                    x.to_data_list()
-                )
-            )
-            yield sample, sample_list
 
 
 def get_dataloader(

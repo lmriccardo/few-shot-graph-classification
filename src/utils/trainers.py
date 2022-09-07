@@ -179,12 +179,34 @@ class ASMAMLTrainer(BaseTrainer):
     def get_meta(self) -> AdaptiveStepMAML:
         """Return the meta model"""
         self.logger.debug(f"Creating the AS-MAML model")
-        return AdaptiveStepMAML(self.model,
-                                inner_lr=config.INNER_LR,
-                                outer_lr=config.OUTER_LR,
-                                stop_lr=config.STOP_LR,
-                                weight_decay=config.WEIGHT_DECAY,
-                                paper=self.paper).to(config.DEVICE)
+        config_meta = {
+            "inner_lr"           : config.INNER_LR,
+            "train_way"          : config.TRAIN_WAY,
+            "train_shot"         : config.TRAIN_SHOT,
+            "train_query"        : config.TRAIN_QUERY,
+            "grad_clip"          : config.GRAD_CLIP,
+            "batch_per_episodes" : config.BATCH_PER_EPISODES,
+            "flexible_step"      : config.FLEXIBLE_STEP,
+            "min_step"           : config.MIN_STEP,
+            "max_step"           : config.MAX_STEP,
+            "step_test"          : config.STEP_TEST,
+            "step_penalty"       : config.STEP_PENALITY,
+            "use_score"          : config.USE_SCORE,
+            "use_loss"           : config.USE_LOSS,
+            "outer_lr"           : config.OUTER_LR,
+            "stop_lr"            : config.STOP_LR,
+            "patience"           : config.PATIENCE,
+            "paper"              : self.paper,
+            "weight_decay"       : config.WEIGHT_DECAY
+        }
+        # return AdaptiveStepMAML(self.model,
+        #                         inner_lr=config.INNER_LR,
+        #                         outer_lr=config.OUTER_LR,
+        #                         stop_lr=config.STOP_LR,
+        #                         weight_decay=config.WEIGHT_DECAY,
+        #                         paper=self.paper).to(config.DEVICE)
+
+        return AdaptiveStepMAML(self.model, config_meta).to(config.DEVICE)
 
     def run_one_step_train(
         self, support_data: Data, query_data: Data, train_accs: List[float],

@@ -113,7 +113,3 @@ class TaskBatchSampler(torch.utils.data.Sampler):
 
     def __len__(self):
         return len(self.task_sampler) // self.task_batch_size
-
-    def uncollate(self, data_batch):
-        """Invoke the uncollate from utils.utils"""
-        return task_sampler_uncollate(self, data_batch)

@@ -1,19 +1,16 @@
 """From the paper https://arxiv.org/pdf/2007.05700.pdf"""
 import torch
 import torch.nn as nn
-import torch.optim as optim
 import torch.nn.functional as F
 
-from torch.nn.parameter import Parameter
-from torch.optim.lr_scheduler import _LRScheduler
 from torch.utils.data import DataLoader
 from torch_geometric.data import Data
 
 from data.dataset import GraphDataset, augment_dataset
 from data.dataloader import GraphDataLoader
-from utils.utils import rename_edge_indexes, graph2data
+from utils.utils import rename_edge_indexes, to_pygdata
 from utils.trainers import BaseTrainer
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Any
 
 import config
 import networkx as nx
@@ -130,10 +127,10 @@ class MEvolveGDA:
                        classes                 : List[int],
                        classifier_model        : torch.nn.Module,
                        logger                  : logging.Logger,
-                       augmented_data          : List[Tuple[nx.Graph, str]],
+                       augmented_data          : List[Tuple[Dict[str, Any], str]],
                        lr                      : float,
                        theta                   : torch.Tensor,
-                       decay                   : float) -> List[Tuple[nx.Graph, str]]:
+                       decay                   : float) -> List[Tuple[Dict[str, Any], str]]:
         """
         After applying the heuristic for data augmentation, we have a
         bunch of new graphs and respective labels that needs to be
@@ -185,14 +182,14 @@ class MEvolveGDA:
 
         # Filter data
         filtered_data = []
-        for graph, target, edges in augmented_data:
-            geotorch_data = rename_edge_indexes([graph2data(graph, target, edges)])[0]
+        for graph, target in augmented_data:
+            geotorch_data = rename_edge_indexes([to_pygdata(graph, target)])[0]
             prob_vector, _, _ = classifier_model(geotorch_data.x, geotorch_data.edge_index, geotorch_data.batch)
             sample_classes = random.sample([classes_mapping[x] for x in classes if x != target], k=prob_vector.shape[1] - 1)
             choices = sorted([classes_mapping[target]] + sample_classes)
             r = prob_vector[0] @ confusion_matrix[classes_mapping[target], choices]
             if r > label_rel_threshold:
-                filtered_data.append((graph, target, edges))
+                filtered_data.append((graph, target))
         
         return filtered_data
     
