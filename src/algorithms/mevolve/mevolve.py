@@ -116,7 +116,7 @@ class MEvolveGDA:
             theta.requires_grad = True
             current_step += 1
         
-            lr = lr * (1. / (1. + decay * current_step))
+        lr = lr * (1. / (1. + decay * current_step))
         
         return theta.data.item()
 
@@ -184,6 +184,7 @@ class MEvolveGDA:
         filtered_data = []
         for graph, target in augmented_data:
             geotorch_data = rename_edge_indexes([to_pygdata(graph, target)])[0]
+            geotorch_data.batch = torch.tensor([0] * geotorch_data.x.shape[0])
             prob_vector, _, _ = classifier_model(geotorch_data.x, geotorch_data.edge_index, geotorch_data.batch)
             sample_classes = random.sample([classes_mapping[x] for x in classes if x != target], k=prob_vector.shape[1] - 1)
             choices = sorted([classes_mapping[target]] + sample_classes)
@@ -224,7 +225,7 @@ class MEvolveGDA:
 
             # 2. Compute the graph probability vector
             val_dl = GraphDataLoader(self.validation_ds, batch_size=self.pre_trained_model.num_classes, drop_last=True)
-            prob_matrix = self.compute_prob_vector(val_dl, self.validation_ds.number_of_classes(), self.pre_trained_model)
+            prob_matrix = self.compute_prob_vector(val_dl, self.validation_ds.number_of_classes, self.pre_trained_model)
             
             # 2.5 Create a list with all the validation graph data
             validation_data_list = []
@@ -234,7 +235,7 @@ class MEvolveGDA:
             # 3. Compute data filtering
             filtered_data = self.data_filtering(
                 self.validation_ds, prob_matrix, validation_data_list, 
-                self.validation_ds.get_classes(), self.pre_trained_model,
+                self.validation_ds.classes, self.pre_trained_model,
                 self.logger, d_pool, lr, theta, decay
             )
 

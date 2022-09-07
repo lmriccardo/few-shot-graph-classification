@@ -3,7 +3,7 @@ import torch
 from utils.utils import configure_logger
 from data.dataset import get_dataset, split_dataset
 from utils.trainers import KFoldTrainer
-from algorithms.asmaml.asmaml import AdaptiveStepMAML
+from algorithms.asmaml.asmaml1 import AdaptiveStepMAML
 from algorithms.mevolve.mevolve import MEvolveGDA
 
 import config

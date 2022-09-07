@@ -84,7 +84,7 @@ class GraphDataset(Dataset):
 
     def __add__(self, other: Union['GraphDataset', List[Tuple[Dict[str, Any], str]]]) -> 'GraphDataset':
         """Create a new graph dataset as the sum of the current and the input given dataset"""
-        last_id = max(self.__len__()) + 1
+        last_id = self.__len__() + 1
         if isinstance(other, GraphDataset):
             other = list(other.graph_ds.values())
         
@@ -293,7 +293,7 @@ def random_mapping_heuristic(graphs: GraphDataset) -> List[Tuple[Dict[str, Any],
     new_graphs = []
     
     # Iterate over all graphs
-    for _, ds_element in graphs.graphs_ds.items():
+    for _, ds_element in graphs.graph_ds.items():
         current_graph_data, label = ds_element
 
         # Takes all edges
@@ -362,7 +362,7 @@ def motif_similarity_mapping_heuristic(graphs: GraphDataset) -> List[Tuple[Dict[
     new_graphs = []
 
     # Iterate over all graphs
-    for _, ds_element in graphs.graphs_ds.items():
+    for _, ds_element in graphs.graph_ds.items():
         current_graph_data, label = ds_element
         number_of_nodes = len(current_graph_data["nodes"])
         number_of_edges = len(current_graph_data["edges"])

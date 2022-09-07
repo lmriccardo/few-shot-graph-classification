@@ -113,7 +113,7 @@ class AdaptiveStepMAML(nn.Module):
                 except AssertionError:
                     print("Logits: ", logits)
                     print("Score: ", score)
-                    print(self.net.parameters())
+                    print([param for param in self.parameters()])
                     print("Loss: ", loss)
                     print("Loss Grad: ", grad)
 
@@ -274,7 +274,7 @@ class AdaptiveStepMAML(nn.Module):
                 except AssertionError:
                     print("Logits: ", logits)
                     print("Score: ", score)
-                    print(self.net.parameters())
+                    print([param for param in self.parameters()])
                     print("Loss: ", loss)
                     print("Loss Grad: ", loss.grad)
 
