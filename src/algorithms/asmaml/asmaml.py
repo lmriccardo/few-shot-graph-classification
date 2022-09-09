@@ -97,13 +97,14 @@ class AdaptiveStepMAML(nn.Module):
 
             for k in range(0, ada_step):
                 # 1. run the i-th task and compute loss for k=1~K-1
-                support_nodes = support_nodes[i] if self.paper else support_data.x
-                support_edge_index = support_edge_index[i] if self.paper else support_data.edge_index
-                support_graph_indicator = support_graph_indicator[i] if self.paper else support_data.batch
-                support_label = support_label[i] if self.paper else support_data.y
-                logits, score, _= self.net(support_nodes, support_edge_index, support_graph_indicator)
+                support_nodes_ = support_nodes[i] if self.paper else support_data.x
+                support_edge_index_ = support_edge_index[i] if self.paper else support_data.edge_index
+                support_graph_indicator_ = support_graph_indicator[i] if self.paper else support_data.batch
+                support_label_ = support_label[i] if self.paper else support_data.y
 
-                loss=self.com_loss(logits,support_label)
+                logits, score, _= self.net(support_nodes_, support_edge_index_, support_graph_indicator_)
+
+                loss=self.com_loss(logits,support_label_)
                 stop_pro=0
                 grad = torch.autograd.grad(loss, fast_parameters, create_graph=True)
                 try:
@@ -144,20 +145,20 @@ class AdaptiveStepMAML(nn.Module):
                     # gradients calculated in line 45 are based on newest fast weight, but the graph will retain the link to old weight.fasts
                     fast_parameters.append(weight.fast)
 
-                query_nodes = query_nodes[i] if self.paper else query_data.x
-                query_edge_index = query_edge_index[i] if self.paper else query_data.edge_index
-                query_graph_indicator = query_graph_indicator[i] if self.paper else query_data.batch
-                query_label = query_label[i] if self.paper else query_data.y
-                logits_q, _ ,_= self.net(query_nodes, query_edge_index, query_graph_indicator)
+                query_nodes_ = query_nodes[i] if self.paper else query_data.x
+                query_edge_index_ = query_edge_index[i] if self.paper else query_data.edge_index
+                query_graph_indicator_ = query_graph_indicator[i] if self.paper else query_data.batch
+                query_label_ = query_label[i] if self.paper else query_data.y
+                logits_q, _ ,_= self.net(query_nodes_, query_edge_index_, query_graph_indicator_)
                 # loss_q will be overwritten and just keep the loss_q on last update step.
 
-                loss_q = self.com_loss(logits_q,query_label)
+                loss_q = self.com_loss(logits_q,query_label_)
 
                 losses_q.append(loss_q)
 
                 with torch.no_grad():
                     pred_q = F.softmax(logits_q, dim=1).argmax(dim=1)
-                    correct = torch.eq(pred_q, query_label).sum().item()  # convert to numpy
+                    correct = torch.eq(pred_q, query_label_).sum().item()  # convert to numpy
                     corrects.append(correct)
 
         final_loss = losses_q[step]
@@ -248,6 +249,8 @@ class AdaptiveStepMAML(nn.Module):
         step=0
         stop_gates,scores,query_loss=[],[],[]
 
+        lista = []
+
         for i in range(task_num):
 
             fast_parameters = list(self.net.parameters())  # the first gradient calcuated in line 45 is based on original weight
@@ -260,12 +263,12 @@ class AdaptiveStepMAML(nn.Module):
 
             for k in range(0, ada_step):
                 # 1. run the i-th task and compute loss for k=1~K-1
-                support_nodes = support_nodes[i] if self.paper else support_data.x
-                support_edge_index = support_edge_index[i] if self.paper else support_data.edge_index
-                support_graph_indicator = support_graph_indicator[i] if self.paper else support_data.batch
-                support_label = support_label[i] if self.paper else support_data.y
-                logits,score,_ = self.net(support_nodes, support_edge_index, support_graph_indicator)
-                loss = self.com_loss(logits, support_label)
+                support_nodes_ = support_nodes[i] if self.paper else support_data.x
+                support_edge_index_ = support_edge_index[i] if self.paper else support_data.edge_index
+                support_graph_indicator_ = support_graph_indicator[i] if self.paper else support_data.batch
+                support_label_ = support_label[i] if self.paper else support_data.y
+                logits,score,_ = self.net(support_nodes_, support_edge_index_, support_graph_indicator_)
+                loss = self.com_loss(logits, support_label_)
                 stop_pro=0
                 try:
                     if self.flexible_step:
@@ -303,12 +306,12 @@ class AdaptiveStepMAML(nn.Module):
                     # gradients calculated in line 45 are based on newest fast weight, but the graph will retain the link to old weight.fasts
                     fast_parameters.append(weight.fast)
 
-                query_nodes = query_nodes[i] if self.paper else query_data.x
-                query_edge_index = query_edge_index[i] if self.paper else query_data.edge_index
-                query_graph_indicator = query_graph_indicator[i] if self.paper else query_data.batch
-                query_label = query_label[i] if self.paper else query_data.y
-                logits_q, _, graph_emb = self.net(query_nodes, query_edge_index, query_graph_indicator)
-                self.graph_labels.append(query_label.reshape(-1))
+                query_nodes_ = query_nodes[i] if self.paper else query_data.x
+                query_edge_index_ = query_edge_index[i] if self.paper else query_data.edge_index
+                query_graph_indicator_ = query_graph_indicator[i] if self.paper else query_data.batch
+                query_label_ = query_label[i] if self.paper else query_data.y
+                logits_q, _, graph_emb = self.net(query_nodes_, query_edge_index_, query_graph_indicator_)
+                self.graph_labels.append(query_label_.reshape(-1))
                 self.graph_embs.append(graph_emb)
 
                 if self.index%1==0:
@@ -320,15 +323,17 @@ class AdaptiveStepMAML(nn.Module):
 
                 with torch.no_grad():
                     pred_q = F.softmax(logits_q, dim=1).argmax(dim=1)
-                    correct = torch.eq(pred_q, query_label).sum().item()  # convert to numpy
+                    correct = torch.eq(pred_q, query_label_).sum().item()  # convert to numpy
                     corrects.append(correct)
-                    loss_query=self.com_loss(logits_q,query_label)
+                    loss_query=self.com_loss(logits_q,query_label_)
                     query_loss.append(loss_query.item())
+
+                    lista = [pred_q.tolist(), query_label_.tolist()]
 
         accs = 100 * np.array(corrects) / querysz * task_num
         if self.flexible_step:
             stop_gates=[stop_gate.item() for stop_gate in stop_gates]
-        return accs,step,stop_gates,scores,query_loss
+        return accs,step,stop_gates,scores,query_loss, lista
 
     def adapt_meta_learning_rate(self, loss):
         self.scheduler.step(loss)

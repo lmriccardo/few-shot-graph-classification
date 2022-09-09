@@ -239,8 +239,10 @@ class ASMAMLTrainer(BaseTrainer):
         """Run one episode, i.e. one or more tasks, of validation"""
         super().run_one_step_validation(support_data, query_data, val_accs)
 
-        accs, step, _, _, _ = self.meta_model.finetuning(support_data, query_data)
+        accs, step, _, _, _, lista = self.meta_model.finetuning(support_data, query_data)
         val_accs.append(accs[step])
+        
+        return lista
     
     def train_phase(self) -> Tuple[List[float], List[float], List[float]]:
         self.meta_model.train()
@@ -267,13 +269,16 @@ class ASMAMLTrainer(BaseTrainer):
         val_accs = []
         self.logger.debug("Validation Phase")
         self.meta_model.eval()
+        liste = []
         for _, data in enumerate(tqdm(self.val_dl)):
             if not self.paper:
                 support_data, _, query_data, _ = data
             else:
                 support_data, query_data = data
-            self.run_one_step_validation(support_data=support_data, query_data=query_data, val_accs=val_accs)
+            lista = self.run_one_step_validation(support_data=support_data, query_data=query_data, val_accs=val_accs)
+            liste.append(lista)
         
+        # print(torch.tensor(liste))
         self.logger.debug("Ended Validation Phase")
         return val_accs
     

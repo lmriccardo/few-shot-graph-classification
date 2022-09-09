@@ -847,8 +847,14 @@ def get_max_acc(accs, step, scores, min_step, test_step):
     return accs[step]
 
 
-def build_adjacency_matrix(graph_data: Dict[str, Any]) -> torch.Tensor:
+def build_adjacency_matrix(graph_data: Dict[str, Any] | gdata.Data) -> torch.Tensor:
     """Construct the adjacency matrix of a graph"""
+    if isinstance(graph_data, gdata.Data):
+        graph_data = {
+            "nodes": graph_data.edge_index[0].unique(sorted=True).tolist(), 
+            "edges": graph_data.edge_index.transpose(0, 1).tolist()
+        }
+
     number_of_nodes = len(graph_data["nodes"])
     node_mapping = dict(zip(graph_data["nodes"], range(number_of_nodes)))
     adj_matrix = torch.zeros((number_of_nodes, number_of_nodes), dtype=torch.int)

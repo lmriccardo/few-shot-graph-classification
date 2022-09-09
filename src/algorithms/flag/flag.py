@@ -36,7 +36,7 @@ class FlagGDA:
              targets    : torch.Tensor,
              iterations : int,
              step_size  : float) -> Callable[
-                [Callable[ ... ], List[Any], Dict[Any, Any]], 
+                [Callable[[Any], Any], List[Any], Dict[Any, Any]], 
                 Tuple[float, float, nn.Module, torch.Tensor]
     ]:
         """

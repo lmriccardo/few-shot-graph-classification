@@ -285,8 +285,8 @@ def func() -> None:
 
 
 if __name__ == "__main__":
-    asmaml()
+    # asmaml()
     # m_evolve()
-    # run_paper()
+    run_paper()
     # func()
     # func2()
