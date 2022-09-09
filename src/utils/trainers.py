@@ -7,7 +7,8 @@ from data.dataloader import FewShotDataLoader, get_dataloader
 from models.gcn4maml import GCN4MAML
 from models.sage4maml import SAGE4MAML
 from algorithms.asmaml.asmaml import AdaptiveStepMAML
-from utils.utils import elapsed_time, setup_seed
+from algorithms.flag.flag import FlagGDA
+from utils.utils import elapsed_time, setup_seed, data_batch_collate, rename_edge_indexes
 from utils.kfold import KFoldCrossValidationWrapper
 
 from typing import Union, Tuple, List, Optional
@@ -367,6 +368,112 @@ class KFoldTrainer(BaseTrainer):
         self.meta_model.eval()
         for _, data in enumerate(tqdm(self.val_dl)):
             support_data, _, query_data, _ = data
+            self.run_one_step_validation(support_data=support_data, query_data=query_data, val_accs=val_accs)
+        
+        self.logger.debug("Ended Validation Phase")
+        return val_accs
+    
+    def train(self):
+        return super().train()
+
+
+class FLAGTrainer(BaseTrainer):
+    """Trainer class for FLAG gda technique"""
+    def __init__(self, train_ds: GraphDataset, val_ds: GraphDataset,
+                       logger: logging.Logger, meta_model: Optional[torch.nn.Module]=None,
+                       model_name: str="sage", paper: bool=False, epochs: int=200, 
+                       batch_size: int=1, dataset_name: str="TRIANGLES", save_suffix: str=""
+    ) -> None:
+        super().__init__(
+            train_ds, val_ds, logger, model_name, paper, 
+            epochs, batch_size, dataset_name, save_suffix
+        )
+
+        if meta_model is not None:
+            self._configure_meta(meta_model)
+
+    def _configure_meta(self, meta_model: torch.nn.Module) -> None:
+        self.meta_model = meta_model
+        self.model2save = self.meta_model
+        self.save_suffix = f"{meta_model.__class__.__name__}_KFold_"
+        self.model = self.meta_model.net
+
+    def run_one_step_train(
+        self, support_data: Data, query_data: Data, train_accs: List[float],
+        train_total_losses: List[float], train_final_losses: List[float], 
+        loop_counter: int, support_data_list: List[Data], query_data_list: List[Data]
+    ) -> None:
+        # Use a subfunction to implement the FLAG decorator
+        flag_data = data_batch_collate(rename_edge_indexes(support_data_list + query_data_list))
+
+        @FlagGDA.flag(
+            gnn=self.model, criterion=self.meta_model.loss, data=flag_data,
+            targets=flag_data.y, iterations=config.M, step_size=config.ATTACK_STEP_SIZE
+        )
+        def _run_one_step_train(*args, **kwargs):
+            # to GPU if needed
+            super().run_one_step_train(
+                support_data, query_data, train_accs,
+                train_total_losses, train_final_losses, loop_counter
+            )
+
+            accs, step, final_loss, total_loss, _, _, _, _ = self.meta_model(
+                support_data, query_data
+            )
+
+            train_accs.append(accs[step])
+            train_final_losses.append(final_loss)
+            train_total_losses.append(total_loss)
+
+            if (loop_counter + 1) % 50 == 0:
+                print(f"({loop_counter + 1})" + " Mean Accuracy: {:.6f}, Mean Final Loss: {:.6f}, Mean Total Loss: {:.6f}".format(
+                    np.mean(train_accs), np.mean(train_final_losses), np.mean(train_total_losses)
+                    ), file=sys.stdout if not config.FILE_LOGGING else open(self.logger.handlers[1].baseFilename, mode="a"))
+
+            return train_accs, train_final_losses
+
+        return _run_one_step_train()
+
+    def run_one_step_validation(self, support_data: Data, 
+                                      query_data: Data, 
+                                      val_accs: List[float]) -> None:
+        """Run one episode, i.e. one or more tasks, of validation"""
+        super().run_one_step_validation(support_data, query_data, val_accs)
+
+        accs, step, _, _, _ = self.meta_model.finetuning(support_data, query_data)
+        val_accs.append(accs[step])
+    
+    def train_phase(self) -> Tuple[List[float], List[float], List[float]]:
+        self.meta_model.train()
+        train_accs, train_final_losses, train_total_losses = [], [], []
+
+        self.logger.debug("Training Phase")
+
+        for i, data in enumerate(tqdm(self.train_dl)):
+            if not self.paper:
+                support_data, support_data_list, query_data, query_data_list = data
+            else:
+                support_data, query_data = data
+            self.run_one_step_train(
+                support_data=support_data, query_data=query_data,
+                train_accs=train_accs, train_total_losses=train_total_losses,
+                train_final_losses=train_final_losses, loop_counter=i,
+                support_data_list=support_data_list, query_data_list=query_data_list
+            )
+        
+        self.logger.debug("Ended Training Phase")
+
+        return train_accs, train_final_losses, train_total_losses
+
+    def validation_phase(self) -> List[float]:
+        val_accs = []
+        self.logger.debug("Validation Phase")
+        self.meta_model.eval()
+        for _, data in enumerate(tqdm(self.val_dl)):
+            if not self.paper:
+                support_data, _, query_data, _ = data
+            else:
+                support_data, query_data = data
             self.run_one_step_validation(support_data=support_data, query_data=query_data, val_accs=val_accs)
         
         self.logger.debug("Ended Validation Phase")

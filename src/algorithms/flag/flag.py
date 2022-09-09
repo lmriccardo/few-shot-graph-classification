@@ -7,9 +7,10 @@ import torch.nn.functional as F
 from torch.nn.modules.loss import _Loss, _WeightedLoss
 from torch_geometric.data import Data
 
-from typing import Union, Tuple
+from typing import Union, Tuple, Callable, Any, List, Dict
 
 import config
+import wrapt
 
 
 class FlagGDA:
@@ -26,13 +27,7 @@ class FlagGDA:
     Moreover, it is the first general-purpose feature-based data 
     augmentation method on graph data, which is complementary to other
     regularizers and topological augmentation. 
-
-    Args:
-
     """
-    def __init__(self, ) -> None:
-        ...
-    
     @staticmethod
     def flag(gnn        : nn.Module, 
              criterion  : Union[_Loss, _WeightedLoss], 
@@ -40,7 +35,10 @@ class FlagGDA:
              optimizer  : optim.Optimizer,
              targets    : torch.Tensor,
              iterations : int,
-             step_size  : float) -> Tuple[float, float, nn.Module]:
+             step_size  : float) -> Callable[
+                [Callable[ ... ], List[Any], Dict[Any, Any]], 
+                Tuple[float, float, nn.Module, torch.Tensor]
+    ]:
         """
         Implement the FLAG algorithm as described in the paper and more
         precisely in the source code, which can be found at the following
@@ -53,48 +51,52 @@ class FlagGDA:
         :param iterations: number of iterations
         :param step_size: the step size for improving the perturbation
 
-        :return: the average loss, the average accuracy and the final model
+        :return: the average loss, the average accuracy, the final model and the last loss
         """
-        # Setup model for training and zeros optimizer grads
-        gnn.train()
-        optimizer.zero_grad()
+        @wrapt.decorator
+        def _flag(func, *args, **kwargs) -> Tuple[float, float, nn.Module, torch.Tensor]:
+            # wrapped function
+            avg_acc, avg_loss = func(*args, **kwargs)
 
-        avg_loss = []
-        avg_acc  = []
+            # Setup model for training and zeros optimizer grads
+            gnn.train()
+            optimizer.zero_grad()
 
-        perturbation = torch.FloatTensor(*data.x.shape).uniform_(-step_size, step_size).to(config.DEVICE)
-        perturbation.requires_grad_()
-        logits = gnn(data.x + perturbation, data.edge_index, data.batch)
-        loss = criterion(logits, targets)
-        loss = loss / iterations
+            perturbation = torch.FloatTensor(*data.x.shape).uniform_(-step_size, step_size).to(config.DEVICE)
+            perturbation.requires_grad_()
+            logits = gnn(data.x + perturbation, data.edge_index, data.batch)
+            loss = criterion(logits, targets)
+            loss = loss / iterations
 
-        for _ in range(iterations):
+            for _ in range(iterations):
+                with torch.no_grad():
+                    preds = F.softmax(logits, dim=1).argmax(dim=1)
+                    corrects = torch.eq(preds, targets).sum().item()
+                    avg_acc.append(corrects / targets.shape[0])
+                    avg_loss.append(loss.item())
+                
+                loss.backward()
+
+                perturb_data = perturbation.detach() + step_size * torch.sign(perturbation.grad.detach())
+                perturbation.data = perturb_data.data
+                perturbation.grad[:] = 0
+
+                logits = gnn(data.x + perturbation, data.edge_index, data.batch)
+                loss = criterion(logits, targets)
+                loss = loss / iterations
+            
             with torch.no_grad():
                 preds = F.softmax(logits, dim=1).argmax(dim=1)
                 corrects = torch.eq(preds, targets).sum().item()
                 avg_acc.append(corrects / targets.shape[0])
-                avg_loss.append(loss.item())
-            
+                avg_loss.append(loss)
+                
             loss.backward()
+            optimizer.step()
 
-            perturb_data = perturbation.detach() + step_size * torch.sign(perturbation.grad.detach())
-            perturbation.data = perturb_data.data
-            perturbation.grad[:] = 0
+            avg_acc = sum(avg_acc) / len(avg_acc)
+            avg_loss = sum(avg_loss) / len(avg_loss)
 
-            logits = gnn(data.x + perturbation, data.edge_index, data.batch)
-            loss = criterion(logits, targets)
-            loss = loss / iterations
-        
-        with torch.no_grad():
-            preds = F.softmax(logits, dim=1).argmax(dim=1)
-            corrects = torch.eq(preds, targets).sum().item()
-            avg_acc.append(corrects / targets.shape[0])
-            avg_loss.append(loss)
-            
-        loss.backward()
-        optimizer.step()
+            return avg_loss, avg_acc, gnn, loss
 
-        avg_acc = sum(avg_acc) / len(avg_acc)
-        avg_loss = sum(avg_loss) / len(avg_loss)
-
-        return avg_loss, avg_acc, gnn
+        return _flag

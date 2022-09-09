@@ -83,6 +83,11 @@ class GraphDataLoader(DataLoader):
             **kwargs,
         )
 
+    def __iter__(self) -> Iterator[Tuple[pyg_data.Data, List[pyg_data.Data]]]:
+        for data in super().__iter__():
+            data1, data2 = data
+            yield data1, data2
+
 
 def get_dataloader(
     ds: GraphDataset, n_way: int, k_shot: int, n_query: int, 

@@ -27,7 +27,7 @@ SAVE_PRETRAINED = True
 FILE_LOGGING = False
 LOGGING_PATH = os.path.abspath("../log") if FILE_LOGGING else None
 DATA_PATH = os.path.abspath("../data") if not DOWNLOAD_DATASET else None
-MODELS_SAVE_PATH = "../models"
+MODELS_SAVE_PATH = os.path.abspath("../models")
 
 NUM_FEATURES = {"TRIANGLES": 1, "R52": 1, "Letter-High": 2, "COIL-DEL": 2}
 
@@ -85,3 +85,11 @@ HEURISTIC           = "random_mapping"
 LABEL_REL_THRESHOLD_STEPS = 1000
 LABEL_REL_THRESHOLD_BETA  = 30
 LABEL_REL_THRESHOLD_STEP_SIZE = 1E-02
+
+
+###################################################################################
+############################### FLAG CONFIGURATION ################################
+###################################################################################
+
+M                = 3
+ATTACK_STEP_SIZE = 8e-3
