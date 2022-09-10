@@ -769,6 +769,29 @@ def to_pygdata(graph_data: Dict[str, Any], label: str | int) -> gdata.Data:
     edge_index = torch.tensor(graph_data["edges"], dtype=torch.long).t().contiguous()
     y = torch.tensor([label], dtype=torch.long)
     return gdata.Data(x=x, edge_index=edge_index, y=y)
+
+
+def to_datadict(data: Union[gdata.Data, List[gdata.Data]]) -> Dict[str,Any]:
+    """Return the dictionary representation of one or more graphs data"""
+    if not isinstance(data, list):
+        data = [data]
+
+    graphs = dict()
+    for graph_i, graph_data in enumerate(data):
+        edges = graph_data.edge_index.transpose(0,1).tolist()
+        nodes = graph_data.edge_index[0].unique(sorted=True)
+        attributes = graph_data.x.tolist()
+
+        # Handle one-hot encoded labels
+        label = graph_data.y.item() if graph_data.y.shape[0] == 1 else f"{graph_data.y.tolist()}"
+
+        graphs[graph_i] = ({
+            "nodes"       : nodes,
+            "edges"       : edges,
+            "atttributes" : attributes
+        }, label)
+
+    return graphs
     
 
 #######################################################

@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 import torch_geometric.data as pyg_data
 
 from torch.utils.data import Dataset
@@ -29,6 +30,8 @@ class GraphDataset(Dataset):
         super(GraphDataset, self).__init__()
         self.graph_ds = graph_ds
         self.count_per_class = dict()
+        self.ohe_labels = False  # True if there is at least one data with One-Hot Encoded label
+        self.one_hot_mapping = dict()
     
     @classmethod
     def get_dataset(cls, attributes  : List[Any], 
@@ -86,15 +89,20 @@ class GraphDataset(Dataset):
         """Create a new graph dataset as the sum of the current and the input given dataset"""
         last_id = self.__len__() + 1
         if isinstance(other, GraphDataset):
-            other = list(other.graph_ds.values())
+            other = other.graph_ds
         
         data_dict = deepcopy(self.graph_ds)
-        for elem in other:
+        is_ohe_label = False
+        for elem in other.values():
             data_dict[last_id] = elem
             last_id += 1
+
+            if isinstance(elem[-1], str | torch.Tensor | List[Union[int, float]]):
+                is_ohe_label = True
         
         new_ds = GraphDataset(data_dict)
         new_ds.count_per_class = GraphDataset._count_per_class(new_ds)
+        new_ds.ohe_labels = is_ohe_label
         return new_ds
 
     def __iadd__(self, other: Union['GraphDataset', List[Tuple[Dict[str, Any], str]]]) -> 'GraphDataset':
@@ -107,8 +115,24 @@ class GraphDataset(Dataset):
         g_data, label = self.graph_ds[idx]
         x = torch.tensor(g_data["attributes"], dtype=torch.float)
         edge_index = torch.tensor(g_data["edges"], dtype=torch.long).t().contiguous()
-        y = torch.tensor([label], dtype=torch.long)
 
+        # If at least one label is one-hot encoded that we need to OHE all other labels
+        if not self.ohe_labels:
+            y = torch.tensor([label], dtype=torch.long)
+            return (x, edge_index, y)
+
+        if isinstance(label, int):
+            # y = F.one_hot()
+            ...
+
+        if isinstance(label, str):
+            y = torch.tensor(eval(label), dtype=torch.long)
+            return (x, edge_index, y)
+        
+        if isinstance(label, List[Union[int, float]]):
+            y = torch.tensor(label, dtype=torch.long)
+            return (x, edge_index, y)
+        
         return (x, edge_index, y)
     
     @staticmethod
@@ -119,6 +143,12 @@ class GraphDataset(Dataset):
             count_per_class[label] += 1
         
         return count_per_class
+
+    @staticmethod
+    def _one_hot_mapping(graph_ds: 'GraphDataset') -> Dict[str | int, torch.Tensor]:
+        num_classes = graph_ds.number_of_classes
+        one_hot_encoding = F.one_hot(torch.tensor(list(range(num_classes))))
+        return dict(zip(graph_ds.classes, one_hot_encoding))
     
     @property
     def classes(self) -> List[int | str]:
@@ -134,7 +164,7 @@ class GraphDataset(Dataset):
         """Returns for each graph its correspective class (with duplicate)"""
         return torch.tensor([int(label) for _, (_, label) in self.graph_ds.items()], dtype=torch.long)
 
-    def get_graphs_per_label(self) -> Dict[str, List[Any]]:
+    def get_graphs_per_label(self) -> Dict[str, List[Dict[str, Any]]]:
         """Return a dictionary (label, list_of_graph with that label)"""
         graphs_per_label = {target : [] for target in self.classes}
         for _, (g_data, label) in self.graph_ds.items():
