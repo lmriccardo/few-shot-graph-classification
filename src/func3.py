@@ -1,7 +1,7 @@
 import torch
 
 from utils.utils import configure_logger
-from data.dataset import get_dataset
+from data.dataset import get_dataset, OHGraphDataset
 from algorithms.gmixup.gmixup import GMixupGDA
 
 import config
@@ -24,5 +24,11 @@ def func() -> None:
 
     gm = GMixupGDA(train_ds)
     new_ds = gm()
+
+    # oh_train_ds = OHGraphDataset(train_ds)
+    # print(oh_train_ds[0])
+    print(new_ds)
+    first_item_key = min(new_ds.graph_ds.keys())
+    print(new_ds[first_item_key][0].shape)
 
 func()

@@ -783,12 +783,14 @@ def to_datadict(data: Union[gdata.Data, List[gdata.Data]]) -> Dict[str,Any]:
         attributes = graph_data.x.tolist()
 
         # Handle one-hot encoded labels
-        label = graph_data.y.item() if graph_data.y.shape[0] == 1 else f"{graph_data.y.tolist()}"
+        label = graph_data.y
+        if label.shape[0] == 1:
+            label = label.item()
 
         graphs[graph_i] = ({
-            "nodes"       : nodes,
-            "edges"       : edges,
-            "atttributes" : attributes
+            "nodes"      : nodes,
+            "edges"      : edges,
+            "attributes" : attributes
         }, label)
 
     return graphs

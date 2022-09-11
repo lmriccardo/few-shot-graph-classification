@@ -7,7 +7,7 @@ from torch.nn.modules.loss import _Loss
 from torch_geometric.utils import dense_to_sparse
 from torch_geometric.nn.pool import global_mean_pool
 from utils.utils import build_adjacency_matrix, to_pygdata, to_datadict
-from data.dataset import GraphDataset
+from data.dataset import GraphDataset, OHGraphDataset
 from typing import List, Tuple
 from copy import deepcopy
 
@@ -131,12 +131,14 @@ def two_graphons_mixup(two_graphons: Tuple[Tuple[torch.Tensor, torch.Tensor, tor
         sample_graph = sample_graph[:, sample_graph.sum(dim=0) != 0]
         edge_index, _ = dense_to_sparse(sample_graph)
 
-        sample_graphs.append(pyg_data.Data(
-                                x=sample_graph_x,
-                                y=sample_graph_label,
-                                edge_index=edge_index
-                            ))
-    
+        sample_graphs.append(
+            pyg_data.Data(
+                x=sample_graph_x,
+                y=sample_graph_label,
+                edge_index=edge_index
+            )
+        )
+
     return sample_graphs
 
 
@@ -235,7 +237,7 @@ class GMixupGDA:
         print("Augmenting original dataset with new data")
 
         augmented_graphs = to_datadict(augmented_graphs)
-        new_dataset = self.dataset + augmented_graphs
+        new_dataset = OHGraphDataset.from_dict(augmented_graphs)
 
         print("Resulting new dataset has size of: ", len(new_dataset))
         
