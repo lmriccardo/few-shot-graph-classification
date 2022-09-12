@@ -6,10 +6,12 @@ import torch_geometric.data as pyg_data
 from torch.nn.modules.loss import _Loss
 from torch_geometric.utils import dense_to_sparse
 from torch_geometric.nn.pool import global_mean_pool
-from utils.utils import build_adjacency_matrix, to_pygdata, to_datadict
+from utils.utils import build_adjacency_matrix, to_pygdata
+from utils.utils import to_datadict, cartesian_product
 from data.dataset import GraphDataset, OHGraphDataset
 from typing import List, Tuple
 from copy import deepcopy
+from collections import defaultdict
 
 import math
 import random
@@ -67,11 +69,12 @@ def align_graphs(graphs : List[pyg_data.Data], padding: bool=True) -> Tuple[
             sorted_node_x = aligned_node_x
 
         sorted_node_x_shape = current_node_feature_idx + sorted_node_x.shape[0]
-        normalized_node_degrees.append(sorted_node_degree)
-        aligned_graphs.append(sorted_graph)
         aligned_node_xs[current_node_feature_idx : sorted_node_x_shape, :] = sorted_node_x
         current_node_feature_idx = sorted_node_x_shape
         batches.extend([graph_i] * sorted_node_x.shape[0])
+
+        normalized_node_degrees.append(sorted_node_degree)
+        aligned_graphs.append(sorted_graph)
 
     return aligned_graphs, aligned_node_xs, torch.tensor(batches),\
            normalized_node_degrees, max_num, min_num
@@ -110,6 +113,10 @@ def two_graphons_mixup(two_graphons: Tuple[Tuple[torch.Tensor, torch.Tensor, tor
     """
     Mixup two graphons and generate a number of samples. 
 
+    :param two_graphons: a pair of tuple (graphon, node_features, one-hot-label)
+    :param la: lamda parameter
+    :param num_sample: how many sample to generate
+    :return: a list with new sampled data
     """
     first_graphon, first_x, first_label = two_graphons[0]
     second_graphon, second_x, second_label = two_graphons[1]
@@ -133,7 +140,10 @@ def two_graphons_mixup(two_graphons: Tuple[Tuple[torch.Tensor, torch.Tensor, tor
 
         sample_graphs.append(
             pyg_data.Data(
-                x=sample_graph_x,
+                x=torch.tensor(random.sample(
+                    sample_graph_x.tolist(), edge_index.shape[1]), 
+                    dtype=torch.float
+                ),
                 y=sample_graph_label,
                 edge_index=edge_index
             )
@@ -189,8 +199,7 @@ class GMixupGDA:
         self.dataset = dataset
     
     def __call__(self, lam_range: Tuple[float]=[0.05, 0.1], 
-                       aug_ratio: float=0.15,
-                       aug_num  : int=10) -> None:
+                       aug_ratio: float=0.15) -> OHGraphDataset:
         """
         Run the data augmentation technique.
 
@@ -199,46 +208,55 @@ class GMixupGDA:
         :param lam_range: the low and high value for a uniform distribution
         :param aug_ratio: the augmentation ratio, used to compute the
                           total number of sample to generate.
-        :param aug_num: the augmentation number
-        :return: None
+        :return: the new dataset
         """
         class_graphs = self.dataset.get_graphs_per_label()
-        num_classes = self.dataset.number_of_classes
-        classes_mapping = dict(zip(self.dataset.classes, range(num_classes)))
-        graphons = []
+        num_classes = max(self.dataset.classes) + 1
+        graphons = defaultdict(list)
 
         for label, graph_list in class_graphs.items():
-            one_hot_label = F.one_hot(torch.tensor([classes_mapping[label]]).long(), num_classes=num_classes)[0]
+            one_hot_label = F.one_hot(torch.tensor([label]).long(), num_classes=num_classes)[0]
             print(f"Estimating graphons for label: {label} -> {one_hot_label}")
 
             graph_list = [to_pygdata(graph, label) for graph in graph_list]
             aligned_graphs, aligned_nodes_features, batches, _, _, _ = align_graphs(graph_list)
             pooled_x = global_mean_pool(aligned_nodes_features, batches)
             graphon = usvd(aligned_graphs, 0.2)
-            graphons.append((graphon, pooled_x, one_hot_label))
-
+            graphons[label].append((graphon, pooled_x, one_hot_label))
+        
+        aug_num = int( self.dataset.number_of_classes * (self.dataset.number_of_classes - 1) / 2 )
         num_sample = int( len(self.dataset) * aug_ratio / aug_num )
-        lam_list = torch.Tensor(aug_num,).uniform_(lam_range[0], lam_range[1])
+        lam_list = torch.Tensor(aug_num,).uniform_(lam_range[0], lam_range[1]).tolist()
 
         print(f"=======================================\nNumber of samples: {num_sample}")
-        print("Lambdas for Mixup: " + ",".join(["{:.4f}".format(x) for x in lam_list.tolist()]))
+        print("Lambdas for Mixup: " + ",".join(["{:.4f}".format(x) for x in lam_list]))
         print("=======================================")
         print("Executing Mixup for generating new sample data")
 
         augmented_graphs = []
-        for lam in lam_list.tolist():
-            print(f"--> Using lambda: {lam}")
+        current_lam_index = 0
+        for (label_x, label_y) in cartesian_product(self.dataset.classes, filter=lambda x,y: x < y):
+            if current_lam_index >= len(lam_list):
+                break
+
+            print(f"--> Using lambda: {lam_list[current_lam_index]} ... ", end="")
+            for _ in range(num_sample):
+                first_graphon = random.sample(graphons[label_x], k=1)[0]
+                second_graphon = random.sample(graphons[label_y], k=1)[0]
+                two_graphons = [first_graphon, second_graphon]
+                augmented_graphs += two_graphons_mixup(two_graphons, la=lam_list[current_lam_index], num_sample=num_sample)
             
-            two_graphons = random.sample(graphons, k=2)
-            augmented_graphs += two_graphons_mixup(two_graphons, la=lam, num_sample=num_sample)
-            print(f"--> Generated new graphs for One-Hot Encoded label: {augmented_graphs[-1].y}")
+            print(f"New graphs for label: {augmented_graphs[-1].y}")
+            
+            current_lam_index += 1
 
         print("=======================================")
         print("Augmenting original dataset with new data")
 
         augmented_graphs = to_datadict(augmented_graphs)
-        new_dataset = OHGraphDataset.from_dict(augmented_graphs)
+        dataset = deepcopy(self.dataset)
+        new_dataset = OHGraphDataset(dataset) + OHGraphDataset.from_dict(augmented_graphs)
 
-        print("Resulting new dataset has size of: ", len(new_dataset))
+        print("RESULTING AUGMENTED DATASET HAS SIZE: ", len(new_dataset))
         
         return new_dataset

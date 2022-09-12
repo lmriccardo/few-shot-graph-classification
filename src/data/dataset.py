@@ -220,15 +220,15 @@ class OHGraphDataset(torch.utils.data.Dataset):
         
     def _add_from_dict(self, other: 'OHGraphDataset') -> 'OHGraphDataset':
         """Create a new summed dataset where other is a from_dict dataset"""
-        ds = list(self.graph_ds.items()) + list(other.graph_ds.items())
+        ds = list(self.graph_ds.values()) + list(other.graph_ds.values())
         
         # Take the max overall the shape of the labels
-        max_shape = max(self.num_classes, other.num_classes) + 1
-        zeros_matrix = torch.zeros((self.__len__() + len(other), max_shape), dtype=torch.long)
+        max_shape = max(self.num_classes, other.num_classes)
+        zeros_matrix = torch.zeros((self.__len__() + len(other), max_shape))
         
         # Create a new dictionary and adjust the one-hot encoded labels
         graph_ds = dict()
-        for ds_i, (g, label) in ds:
+        for ds_i, (g, label) in enumerate(ds):
             oh_label = zeros_matrix[ds_i]
             oh_label[:label.shape[0]] = label
             graph_ds[ds_i] = (g, oh_label)
@@ -238,6 +238,9 @@ class OHGraphDataset(torch.utils.data.Dataset):
         
     def __add__(self, other: Union['OHGraphDataset', GraphDataset, Dict[int, Dict[str, Any]]]) -> 'OHGraphDataset':
         """Create a new graph dataset as the sum of the current and the input given dataset"""
+        if isinstance(other, OHGraphDataset) and other.from_dict:
+            return self._add_from_dict(other)
+
         if isinstance(other, GraphDataset | dict):
             if isinstance(other, dict):
                 # Take the first Item and check if its label
@@ -253,7 +256,6 @@ class OHGraphDataset(torch.utils.data.Dataset):
             other = OHGraphDataset(other)
             return self.__add__(other)
     
-        # We want to compute the total number of classes of the sum of the two dataset
         graph_ds = self.old_graph_ds + other.old_graph_ds
         return OHGraphDataset(graph_ds)
 

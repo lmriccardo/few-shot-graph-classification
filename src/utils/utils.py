@@ -1,4 +1,5 @@
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, Generator
+from copy import deepcopy
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, Generator, Callable
 from functools import wraps
 from datetime import datetime
 import torch_geometric.data as gdata
@@ -582,39 +583,42 @@ def rename_edge_indexes(data_list: List[gdata.Data]) -> List[gdata.Data]:
     egde_index = [[0, 1, 2, 3],[4, 5, 6, 7]] and so on. 
 
     :param data_list: the list of :obj:`torch_geometric.data.Data`
+    :param ohe_labels: if we have to manage labels with One-hot encoding.
     :return: a new list of data
     """
+    data_ = deepcopy(data_list)
     # First of all let's compute the total number of nodes overall
     total_number_nodes = 0
-    for data in data_list:
+    for data in data_:
         total_number_nodes += data.x.shape[0]
 
     # Generate the mapping from old_nodes identifiers to new_node identifiers
     mapping = dict()
     node_number = 0
-    for data in data_list:
+    for data in data_:
         x, y = data.edge_index
         x = torch.hstack((x, y)).unique(sorted=True)
         mapping.update(dict(zip(x.tolist(), range(node_number, node_number + x.shape[0]))))
         node_number = node_number + x.shape[0]
     
     # Finally, map the new nodes
-    for data in data_list:
+    for data in data_:
         x, y = data.edge_index
         new_x = torch.tensor(list(map(lambda x: mapping[x], x.tolist())), dtype=x.dtype, device=x.device)
         new_y = torch.tensor(list(map(lambda y: mapping[y], y.tolist())), dtype=y.dtype, device=y.device)
         new_edge_index = torch.vstack((new_x, new_y))
         data.edge_index = new_edge_index
     
-    return data_list
+    return data_
 
 
-def data_batch_collate(data_list: List[gdata.Data]) -> Tuple[gdata.Data, List[gdata.Data]]:
+def data_batch_collate(data_list: List[gdata.Data], oh_labels: bool=False) -> Tuple[gdata.Data, List[gdata.Data]]:
     """
     Takes as input a list of data and create a new :obj:`torch_geometric.data.Data`
     collating all together. This is a replacement for torch_geometric.data.Batch.from_data_list
 
     :param data_list: a list of torch_geometric.data.Data objects
+    :param oh_labels: True, if data's labels are one-hot encoded
     :return: a new torch_geometric.data.Data object as long as the original list
     """
     x = None
@@ -628,7 +632,12 @@ def data_batch_collate(data_list: List[gdata.Data]) -> Tuple[gdata.Data, List[gd
         edge_index = data.edge_index if edge_index is None else torch.hstack((edge_index, data.edge_index))
         batch += [i_data] * data.x.shape[0]
         num_graphs += 1
-        y = data.y if y is None else torch.hstack((y, data.y))
+
+        if y is None:
+            y = data.y
+            continue
+        
+        y = torch.hstack((y, data.y)) if not oh_labels else torch.vstack((y, data.y))
 
     # Create a mapping between y and a range(0, num_classes_of_y)
     # First we need to compute how many classes do we have
@@ -839,14 +848,16 @@ def configure_logger(file_logging: bool=False,
     return logger
 
 
-def cartesian_product(x: Sequence, y: Optional[Sequence]=None) -> Generator:
+def cartesian_product(x: Sequence, y: Optional[Sequence]=None, 
+                      filter: Optional[Callable[[Any, Any], bool]]=None) -> Generator:
     """Return the cartesian product between two sequences"""
     if y is None:
         y = x
 
     for el_x in x:
         for el_y in y:
-            yield (el_x, el_y)
+            if filter is None or filter(el_x, el_y):
+                yield (el_x, el_y)
 
 
 def get_all_labels(graphs: Dict[str, Tuple[nx.Graph, str]]) -> torch.Tensor:
