@@ -638,16 +638,34 @@ def data_batch_collate(data_list: List[gdata.Data], oh_labels: bool=False) -> Tu
             continue
         
         y = torch.hstack((y, data.y)) if not oh_labels else torch.vstack((y, data.y))
+    
+    if not oh_labels:
+        # Create a mapping between y and a range(0, num_classes_of_y)
+        # First we need to compute how many classes do we have
+        num_classes = y.shape[1]
+        classes = list(range(0, num_classes))
+        mapping = dict(zip(y.unique(sorted=False).tolist(), classes))
 
-    # Create a mapping between y and a range(0, num_classes_of_y)
-    # First we need to compute how many classes do we have
-    num_classes = y.unique().shape[0]
-    classes = list(range(0, num_classes))
-    mapping = dict(zip(y.unique(sorted=False).tolist(), classes))
-    
-    # This mapping is necessary when computing the cross-entropy-loss
-    new_y = torch.tensor(list(map(lambda x: mapping[x], y.tolist())), dtype=y.dtype, device=y.device)
-    
+        # This mapping is necessary when computing the cross-entropy-loss
+        new_y = torch.tensor(list(map(lambda x: mapping[x], y.tolist())), dtype=y.dtype, device=y.device)
+    else:
+        # We need just to drop those columns with all zeros
+        # Now "y" is something like this tensor
+        #
+        #             [0,  0, 0, 0,  1]
+        #             [1,  0, 0, 0,  0]
+        #             [0,  1, 0, 0,  0]
+        #             [0, .7, 0, 0, .3]
+        #                    ...
+        # 
+        # In this case we have that only the label 0, 1, and 4
+        # are used in the sample. So, the idea is to drop the
+        # two zero columns in order to have a y tensor that
+        # fit the output dimension of the model, i.e., the number
+        # of N-way. 
+        new_y = y[:, y.sum(dim=0) != 0]
+        mapping = None  # Set the mapping to None (it is not necessary)
+ 
     data_batch = gdata.Data(
         x=x, edge_index=edge_index, batch=torch.tensor(batch),
         y=new_y, num_graphs=num_graphs, old_classes_mapping=mapping
