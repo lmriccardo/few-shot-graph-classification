@@ -61,6 +61,7 @@ class FlagGDA:
         def _flag(func, *args, **kwargs) -> Tuple[float, float, nn.Module, torch.Tensor]:
             # wrapped function
             avg_acc, avg_loss = func(*args, **kwargs)
+            loss = None
             
             if use:
                 # Setup model for training and zeros optimizer grads

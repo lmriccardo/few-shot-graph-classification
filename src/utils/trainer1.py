@@ -57,7 +57,7 @@ class Trainer:
     ) -> None:
 
         # Cannot use more than one GDA technique at the same time
-        assert sum([use_mevolve, use_flag, use_gmixup]) > 1, "Cannot use more than one GDA technique at the same time"
+        assert sum([use_mevolve, use_flag, use_gmixup]) < 2, "Cannot use more than one GDA technique at the same time"
 
         self.train_ds       = train_ds
         self.validation_ds  = val_ds
@@ -174,7 +174,7 @@ class Trainer:
         """Run one episode, i.e. one or more tasks, of training"""
         flag_data = None
         if support_data_list is not None and query_data_list is not None:
-            flag_data = data_batch_collate(
+            flag_data, _ = data_batch_collate(
                 rename_edge_indexes(support_data_list + query_data_list),
                 oh_labels=self.is_train_oh
             )
@@ -195,7 +195,7 @@ class Trainer:
             targets=flag_data.y, iterations=config.M, step_size=config.ATTACK_STEP_SIZE, 
             use=self.use_flag, optimizer=self.meta_model.meta_optim, oh_labels=self.is_train_oh
         )
-        def _run(*args, **kwargs):
+        def _run(*args, **kwargs) -> Tuple[List[float], List[float]]:
             # If we use the GPU then we need to set the GPU
             accs, step, final_loss, total_loss, _, _, _, _ = self.meta_model(
                 support_data, query_data
@@ -470,6 +470,9 @@ class Trainer:
         
         if self.use_gmixup:
             # TODO: Implement also G-Mixup optimization
+            # Idea: implement a __new__ method for the trainer
+            # given as input the trainer itself, but using
+            # one-hot encoded labels.
             return None
         
         self._train_run()

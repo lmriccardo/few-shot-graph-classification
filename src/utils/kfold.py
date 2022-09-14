@@ -118,9 +118,9 @@ class KFoldCrossValidationWrapper:
                     print("---------------------------------------------------------------")
                     print(f"End testing with fold: {fold + 1}...")
                     print("===============================================================")
-            else:
-                _ = fun(trainer.train_dl, *args, **kwargs)
+                
+                return None
             
-            return None
-        
+            return fun(trainer.train_dl)
+            
         return wrapper

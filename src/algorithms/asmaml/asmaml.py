@@ -331,9 +331,11 @@ class AdaptiveStepMAML(nn.Module):
                     lista = [pred_q.tolist(), query_label_.tolist()]
 
         accs = 100 * np.array(corrects) / querysz * task_num
+
         if self.flexible_step:
             stop_gates=[stop_gate.item() for stop_gate in stop_gates]
-        return accs,step,stop_gates,scores,query_loss, lista
+            
+        return accs,step,stop_gates,scores,query_loss
 
     def adapt_meta_learning_rate(self, loss):
         self.scheduler.step(loss)
