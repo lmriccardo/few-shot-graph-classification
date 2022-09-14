@@ -57,7 +57,7 @@ class AdaptiveStepMAML(nn.Module):
             stop_gate_para=self.stop_gate.parameters()
 
         self.meta_optim = optim.Adam(
-            [{'params': self.net.parameters(), 'lr':config['outer_lr']},
+            [{'params': self.net.parameters(), 'lr': config['outer_lr']},
              {'params': stop_gate_para, 'lr': config['stop_lr']}],
              lr=0.0001, weight_decay=config["weight_decay"])
 

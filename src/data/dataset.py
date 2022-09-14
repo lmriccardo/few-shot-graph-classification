@@ -411,6 +411,10 @@ def get_dataset_from_labels(dataset: GraphDataset, labels: List[str | int]) -> G
     return new_dataset
 
 
+def get_dataset_from_indices(dataset: GraphDataset, indices: List[int]) -> GraphDataset:
+    ...
+
+
 #####################################################################################
 ############################### ML-EVOLVE HEURISTICS ################################
 #####################################################################################

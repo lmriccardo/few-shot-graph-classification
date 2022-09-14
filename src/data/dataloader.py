@@ -97,21 +97,20 @@ class GraphDataLoader(DataLoader):
 
 def get_dataloader(
     ds: GraphDataset | OHGraphDataset, n_way: int, k_shot: int, n_query: int, 
-    epoch_size: int, shuffle: bool, batch_size: int, 
-    exclude_keys: Optional[List[str]] = None, oh_labels: bool=False
+    epoch_size: int, shuffle: bool, batch_size: int, exclude_keys: Optional[List[str]] = None,
+    oh_labels: bool=False, dl_type: FewShotDataLoader | GraphDataLoader=FewShotDataLoader
 ) -> FewShotDataLoader:
     """Return a dataloader instance"""
-    return FewShotDataLoader(
-        dataset=ds,
-        exclude_keys=exclude_keys,
-        batch_sampler=TaskBatchSampler(
-            dataset_targets=ds.get_graphs_per_label(),
-            n_way=n_way,
-            k_shot=k_shot,
-            n_query=n_query,
-            epoch_size=epoch_size,
-            shuffle=shuffle,
-            batch_size=batch_size,
-            oh_labels=oh_labels
+    if dl_type.__name__ == FewShotDataLoader.__name__:
+        return FewShotDataLoader(
+            dataset=ds,
+            exclude_keys=exclude_keys,
+            batch_sampler=TaskBatchSampler(
+                dataset_targets=ds.get_graphs_per_label(),
+                n_way=n_way, k_shot=k_shot, n_query=n_query,
+                epoch_size=epoch_size, shuffle=shuffle,
+                batch_size=batch_size, oh_labels=oh_labels
+            )
         )
-    )
+    
+    return GraphDataLoader(ds, batch_size=batch_size)

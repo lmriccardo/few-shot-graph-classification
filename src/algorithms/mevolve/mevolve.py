@@ -178,7 +178,7 @@ class MEvolveGDA:
             graph_probability_vector, data_list, 
             label_reliabilities, lr, theta, decay
         )
-        logger.debug(f"Computed new label reliability threshold to {label_rel_threshold}")
+        print(f"Computed new label reliability threshold to {label_rel_threshold}")
 
         # Filter data
         filtered_data = []
@@ -219,7 +219,12 @@ class MEvolveGDA:
             self.trainer.train()
 
         current_iteration = 0
+        print("Starting Model-Evolution Graph Data Augmentation Technique")
+        print("==========================================================")
+
         while current_iteration < self.n_iters:
+            print(f"MODEL-EVOLUTION ITERATION NUMBER: {current_iteration}/{self.n_iters}")
+
             # 1. Get augmented Data
             d_pool = augment_dataset(self.train_ds, heuristic=config.HEURISTIC)
 
@@ -244,9 +249,10 @@ class MEvolveGDA:
             self.trainer.train_dl, self.trainer.val_dl = self.trainer.get_dataloaders()
 
             # 5. Re run the trainer
-            # self.trainer.train()
+            self.trainer.train()
 
             # 6. Increment the iteration counter
             current_iteration += 1
+            print("==========================================================")
         
         return self.trainer.model
