@@ -3,13 +3,13 @@ import torch_geometric.data as pyg_data
 from torch.utils.data import DataLoader
 from utils.utils import data_batch_collate, rename_edge_indexes, task_sampler_uncollate
 from data.sampler import TaskBatchSampler
-from data.dataset import GraphDataset
+from data.dataset import GraphDataset, OHGraphDataset
 from typing import Generic, Tuple, List, Optional, Iterator
 from config import T
 from functools import partial
 
 
-def _collate(_batch: Generic[T]) -> Tuple[pyg_data.Data, List[pyg_data.Data]]:
+def _collate(_batch: Generic[T], oh_labels: bool=False) -> Tuple[pyg_data.Data, List[pyg_data.Data]]:
     data_list = []
 
     for element in _batch:
@@ -21,17 +21,17 @@ def _collate(_batch: Generic[T]) -> Tuple[pyg_data.Data, List[pyg_data.Data]]:
         single_data = pyg_data.Data(x=element_x, edge_index=element_edge_index, y=element_label)
         data_list.append(single_data)
 
-    return data_batch_collate(rename_edge_indexes(data_list))
+    return data_batch_collate(rename_edge_indexes(data_list), oh_labels=oh_labels)
 
 
-def graph_collator(batch: Generic[T], sampler: TaskBatchSampler) -> Generic[T]:
+def graph_collator(batch: Generic[T], sampler: TaskBatchSampler, oh_labels: bool=False) -> Generic[T]:
     """collator"""
     support_data_batch, query_data_batch = task_sampler_uncollate(sampler, batch)
-    return _collate(support_data_batch), _collate(query_data_batch)
+    return _collate(support_data_batch, oh_labels), _collate(query_data_batch, oh_labels)
 
 
 class FewShotDataLoader(DataLoader):
-    def __init__(self, dataset     : GraphDataset,
+    def __init__(self, dataset     : GraphDataset | OHGraphDataset,
                        follow_batch: Optional[List[str]] = None,
                        exclude_keys: Optional[List[str]] = None,
                        **kwargs) -> None:
@@ -46,7 +46,9 @@ class FewShotDataLoader(DataLoader):
 
         super().__init__(
             dataset,
-            collate_fn=partial(graph_collator, sampler=self.batch_sampler),
+            collate_fn=partial(graph_collator, 
+                               sampler=self.batch_sampler, 
+                               oh_labels=self.batch_sampler.oh_labels),
             **kwargs,
         )
     
@@ -61,7 +63,7 @@ class FewShotDataLoader(DataLoader):
 
 class GraphDataLoader(DataLoader):
     """Custom simple DataLoader"""
-    def __init__(self, dataset     : GraphDataset,
+    def __init__(self, dataset     : GraphDataset | OHGraphDataset,
                        batch_size  : int=1,
                        shuffle     : bool=True,
                        follow_batch: Optional[List[str]] = None,
@@ -75,11 +77,15 @@ class GraphDataLoader(DataLoader):
         self.follow_batch = follow_batch
         self.exclude_keys = exclude_keys
 
+        self.oh_labels = False
+        if isinstance(OHGraphDataset, dataset):
+            self.oh_labels = True
+
         super().__init__(
             dataset,
             batch_size,
             shuffle,
-            collate_fn=_collate,
+            collate_fn=partial(_collate, oh_labels=self.oh_labels),
             **kwargs,
         )
 
@@ -90,21 +96,22 @@ class GraphDataLoader(DataLoader):
 
 
 def get_dataloader(
-    ds: GraphDataset, n_way: int, k_shot: int, n_query: int, 
+    ds: GraphDataset | OHGraphDataset, n_way: int, k_shot: int, n_query: int, 
     epoch_size: int, shuffle: bool, batch_size: int, 
-    exclude_keys: Optional[List[str]] = None
+    exclude_keys: Optional[List[str]] = None, oh_labels: bool=False
 ) -> FewShotDataLoader:
     """Return a dataloader instance"""
     return FewShotDataLoader(
         dataset=ds,
         exclude_keys=exclude_keys,
         batch_sampler=TaskBatchSampler(
-            dataset_targets=ds.targets(),
+            dataset_targets=ds.get_graphs_per_label(),
             n_way=n_way,
             k_shot=k_shot,
             n_query=n_query,
             epoch_size=epoch_size,
             shuffle=shuffle,
-            batch_size=batch_size
+            batch_size=batch_size,
+            oh_labels=oh_labels
         )
     )

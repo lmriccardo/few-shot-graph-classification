@@ -642,7 +642,7 @@ def data_batch_collate(data_list: List[gdata.Data], oh_labels: bool=False) -> Tu
     if not oh_labels:
         # Create a mapping between y and a range(0, num_classes_of_y)
         # First we need to compute how many classes do we have
-        num_classes = y.shape[1]
+        num_classes = y.shape[0]
         classes = list(range(0, num_classes))
         mapping = dict(zip(y.unique(sorted=False).tolist(), classes))
 

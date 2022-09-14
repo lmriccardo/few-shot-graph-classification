@@ -125,8 +125,8 @@ class AdaptiveStepMAML(nn.Module):
                 scores.append(score.item())
                 with torch.no_grad():
                     pred = F.softmax(logits, dim=1).argmax(dim=1)
-                    correct = torch.eq(pred, support_label).sum().item()
-                    train_accs.append(correct / support_label.size(0))
+                    correct = torch.eq(pred, support_label_).sum().item()
+                    train_accs.append(correct / support_label_.size(0))
 
                 step = k
                 train_losses.append(loss.item())

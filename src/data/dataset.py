@@ -36,6 +36,12 @@ class GraphDataset(Dataset):
                          data        : Dict[str, Any], 
                          num_features: int=1) -> 'GraphDataset':
         """
+        Returns a new instance of GraphDataset filled with graphs inside data. 'attributes'
+        is the list with all the attributes (not only those beloging to nodes in 'data').
+
+        :param data: a dictionary with label2graphs, graph2nodes and graph2edges
+        :param attributes: a list with node attributes
+        :return: a new instance of GraphDataset
         """
         graphs = dict()
 
@@ -136,11 +142,11 @@ class GraphDataset(Dataset):
         """Returns for each graph its correspective class (with duplicate)"""
         return torch.tensor([int(label) for _, (_, label) in self.graph_ds.items()], dtype=torch.long)
 
-    def get_graphs_per_label(self) -> Dict[int | str, List[Dict[str, Any]]]:
+    def get_graphs_per_label(self) -> Dict[int | str, List[int]]:
         """Return a dictionary (label, list_of_graph with that label)"""
         graphs_per_label = {target : [] for target in self.classes}
-        for _, (g_data, label) in self.graph_ds.items():
-            graphs_per_label[label].append(g_data)
+        for graph_id, (_, label) in self.graph_ds.items():
+            graphs_per_label[label].append(graph_id)
         
         return graphs_per_label
 
@@ -190,6 +196,17 @@ class OHGraphDataset(torch.utils.data.Dataset):
     def num_classes(self) -> int:
         """Return the number of total classes"""
         return list(self.graph_ds.values())[0][-1].shape[0]
+
+    def get_graphs_per_label(self) -> Dict[int | str, List[int]]:
+        """Return a dictionary (label, list_of_graph with that label)"""
+        label_to_graphs = defaultdict(list)
+        arange = torch.arange(end=self.num_classes, start=0, step=1)
+        for graph_id, (_, label) in self.graph_ds.items():
+            graph_classes = arange[label > 0].tolist()
+            for cls in graph_classes:
+                label_to_graphs[cls].append(graph_id)
+        
+        return label_to_graphs
     
     def _to_onehot(self) -> None:
         """Tranform each label into a one-hot-encoded label"""
@@ -356,7 +373,8 @@ def split_dataset(dataset: GraphDataset, n_sample: int=2, **kwargs) -> List[Grap
         graph_list = []
         perc = percs[sample_number]
 
-        for label, gs in graphs_per_label.items():
+        for label, graph_ids in graphs_per_label.items():
+            gs = [dataset.graph_ds[gid][0] for gid in graph_ids]
             to_sample = math.ceil(perc * count_per_label[label])
             labels = [label] * to_sample
             graph_elem = list(zip(gs[start_sampling_idx[label]:start_sampling_idx[label] + to_sample], labels))

@@ -214,11 +214,11 @@ class GMixupGDA:
         num_classes = max(self.dataset.classes) + 1
         graphons = defaultdict(list)
 
-        for label, graph_list in class_graphs.items():
+        for label, graph_id_list in class_graphs.items():
             one_hot_label = F.one_hot(torch.tensor([label]).long(), num_classes=num_classes)[0]
             print(f"Estimating graphons for label: {label} -> {one_hot_label}")
 
-            graph_list = [to_pygdata(graph, label) for graph in graph_list]
+            graph_list = [to_pygdata(self.dataset.graph_ds[graph][0], label) for graph in graph_id_list]
             aligned_graphs, aligned_nodes_features, batches, _, _, _ = align_graphs(graph_list)
             pooled_x = global_mean_pool(aligned_nodes_features, batches)
             graphon = usvd(aligned_graphs, 0.2)
