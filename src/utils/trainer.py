@@ -243,8 +243,7 @@ class Trainer:
 
             with torch.no_grad():
                 preds = F.softmax(logits, dim=1).argmax(dim=1)
-                corrects = torch.eq(preds, data.y).sum().item()
-                train_accs.append(compute_accuracy(corrects, data.y))
+                train_accs.append(compute_accuracy(preds, data.y, self.is_train_oh))
             
             train_total_losses.append(loss)
             train_final_losses.append(loss)
@@ -368,8 +367,7 @@ class Trainer:
     
         logits, _, _ = self.model(support_data.x, support_data.edge_index, support_data.batch)
         preds = F.softmax(logits, dim=1).argmax(dim=1)
-        correct = torch.eq(preds, support_data.y)
-        val_accs.append(compute_accuracy(correct, support_data.y))
+        val_accs.append(compute_accuracy(preds, support_data.y, self.is_validation_oh))
 
         return None
 

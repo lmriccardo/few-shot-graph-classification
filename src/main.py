@@ -5,7 +5,7 @@ sys.path.append(os.getcwd())
 
 from data.dataset import get_dataset
 from utils.utils import configure_logger
-from utils.trainer1 import Trainer
+from utils.trainer import Trainer
 from algorithms.asmaml.asmaml import AdaptiveStepMAML
 
 import paper

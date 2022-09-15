@@ -77,8 +77,7 @@ class FlagGDA:
                 for _ in range(iterations):
                     with torch.no_grad():
                         preds = F.softmax(logits, dim=1).argmax(dim=1)
-                        corrects = torch.eq(preds, targets).sum().item()
-                        avg_acc.append(compute_accuracy(corrects, targets))
+                        avg_acc.append(compute_accuracy(preds, targets, oh_labels))
                         avg_loss.append(loss.item())
                     
                     loss.backward()
@@ -93,8 +92,7 @@ class FlagGDA:
                 
                 with torch.no_grad():
                     preds = F.softmax(logits, dim=1).argmax(dim=1)
-                    corrects = torch.eq(preds, targets).sum().item()
-                    avg_acc.append(compute_accuracy(corrects, targets))
+                    avg_acc.append(compute_accuracy(preds, targets, oh_labels))
                     avg_loss.append(loss)
                     
                 loss.backward()

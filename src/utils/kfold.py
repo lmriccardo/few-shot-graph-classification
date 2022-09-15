@@ -104,7 +104,7 @@ class KFoldCrossValidationWrapper:
                             logits, _, _ = net(val_data.x, val_data.edge_idex, val_data.batch)
                             loss_val = loss(logits, val_data.y)
                             preds = F.softmax(logits, dim=1).argmax(dim=1)
-                            acc = compute_accuracy(preds, val_data.y)
+                            acc = compute_accuracy(preds, val_data.y, oh_labels)
 
                             val_loss.append(loss_val)
                             val_accs.append(acc)

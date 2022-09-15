@@ -73,6 +73,7 @@ class FewShotDataLoaderPaper:
         self.epoch_size = epoch_size
 
     def sample_classes(self):
+        print(random.sample(self.dataset.label2graphs.keys(), self.n_way))
         return random.sample(self.dataset.label2graphs.keys(), self.n_way)
 
     def sample_graphs_id(self, classes):
@@ -134,6 +135,7 @@ class FewShotDataLoaderPaper:
 
     def sample_episode(self, idx):
         classes = self.sample_classes()
+        print(classes)
         support_graphs, query_graphs, support_labels, query_labels = self.sample_graphs_id(
             classes)
 
@@ -145,16 +147,16 @@ class FewShotDataLoaderPaper:
         query_labels = torch.from_numpy(query_labels).long()
         query_data.append(query_labels)
 
-        return support_data, query_data
+        return support_data, query_data, classes
 
     def load_function(self, iter_idx):
-        support_data, query_data = self.sample_episode(iter_idx)
-        return support_data, query_data
+        support_data, query_data, classes = self.sample_episode(iter_idx)
+        return support_data, query_data, classes
 
     def get_iterator(self, epoch: int = 0):
-        rand_seed = epoch
-        random.seed(rand_seed)
-        np.random.seed(rand_seed)
+        # rand_seed = epoch
+        # random.seed(rand_seed)
+        # np.random.seed(rand_seed)
 
         tnt_dataset = tnt.dataset.ListDataset(
             elem_list=range(self.epoch_size), load=self.load_function
@@ -162,8 +164,8 @@ class FewShotDataLoaderPaper:
 
         data_loader = tnt_dataset.parallel(
             batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            shuffle=True
+            num_workers=1,
+            shuffle=False
         )
 
         return data_loader

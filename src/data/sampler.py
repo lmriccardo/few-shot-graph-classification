@@ -208,7 +208,7 @@ class FewShotSampler(torch.utils.data.Sampler):
         target_classes = random.sample(list(self.labels.keys()), k=self.n_way)
         for _ in range(self.epoch_size):
 
-            n_way_k_shot_query = []
+            n_way_k_shot_query = [[], []]
             for cl in target_classes:
                 
                 graphs = self.labels[cl]
@@ -217,9 +217,19 @@ class FewShotSampler(torch.utils.data.Sampler):
                 
                 assert len(graphs) >= self.k_shot + self.n_query, "Not enough graphs for sampling"
                 selected_data = random.sample(graphs, k=self.k_shot + self.n_query)
-                n_way_k_shot_query.append(selected_data)
+                n_way_k_shot_query[0] += selected_data[:self.k_shot]
+                n_way_k_shot_query[1] += selected_data[self.k_shot:]
+                # n_way_k_shot_query.append(selected_data)
             
-            yield torch.tensor(n_way_k_shot_query)
+            support_ = torch.tensor(n_way_k_shot_query[0])
+            support_perm = torch.randperm(support_.shape[0])
+            support_ = support_[support_perm]
+
+            query_ = torch.tensor(n_way_k_shot_query[1])
+            query_perm = torch.randperm(query_.shape[0])
+            query_ = query_[query_perm]
+            
+            yield torch.hstack((support_, query_))
         
     def __len__(self) -> int:
         return self.epoch_size

@@ -9,7 +9,6 @@ from torch_geometric.data import Data
 from data.dataset import GraphDataset, augment_dataset
 from data.dataloader import GraphDataLoader
 from utils.utils import rename_edge_indexes, to_pygdata
-from utils.trainers import BaseTrainer
 from typing import Dict, List, Tuple, Any
 
 import config
@@ -35,7 +34,7 @@ class MEvolveGDA:
         pre_trained_model (nn.Module): the pre-trained classifier
     """
     def __init__(self, 
-        trainer: BaseTrainer, n_iters: int, logger: logging.Logger,
+        trainer: 'utils.train.Trainer', n_iters: int, logger: logging.Logger,
         train_ds: GraphDataset, validation_ds: GraphDataset
     ) -> None:
         self.trainer = trainer
@@ -244,9 +243,13 @@ class MEvolveGDA:
                 self.logger, d_pool, lr, theta, decay
             )
 
+            print(f"Number of new generated data: {len(filtered_data)}")
+
             # 4. Change the current train dataset of the trainer
             self.train_ds = self.train_ds + filtered_data
             self.trainer.train_dl, self.trainer.val_dl = self.trainer.get_dataloaders()
+
+            print(f"The new training set has dimension: {len(self.train_ds)}")
 
             # 5. Re run the trainer
             self.trainer.train()

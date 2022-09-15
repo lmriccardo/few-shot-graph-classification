@@ -1,3 +1,4 @@
+import torch
 import torch_geometric.data as pyg_data
 
 from torch.utils.data import DataLoader
@@ -7,6 +8,23 @@ from data.dataset import GraphDataset, OHGraphDataset
 from typing import Generic, Tuple, List, Optional, Iterator
 from config import T
 from functools import partial
+
+
+def uncollate(sampler, batch):
+    n_way = sampler.task_sampler.n_way
+    k_shot = sampler.task_sampler.k_shot
+    batch_size = sampler.task_batch_size
+
+    idxs = torch.arange(start=0, end=len(batch), step=1).view(batch_size, -1)
+    support_batch = []
+    query_batch = []
+    
+    for support_query_idxs in idxs:
+        support_idx, query_idx = support_query_idxs[: (n_way * k_shot)], support_query_idxs[(n_way * k_shot):]
+        support_batch.extend([batch[x] for x in support_idx.tolist()])
+        query_batch.extend([batch[x] for x in query_idx.tolist()])
+        
+    return support_batch, query_batch
 
 
 def _collate(_batch: Generic[T], oh_labels: bool=False) -> Tuple[pyg_data.Data, List[pyg_data.Data]]:
@@ -26,7 +44,8 @@ def _collate(_batch: Generic[T], oh_labels: bool=False) -> Tuple[pyg_data.Data, 
 
 def graph_collator(batch: Generic[T], sampler: TaskBatchSampler, oh_labels: bool=False) -> Generic[T]:
     """collator"""
-    support_data_batch, query_data_batch = task_sampler_uncollate(sampler, batch)
+    # support_data_batch, query_data_batch = task_sampler_uncollate(sampler, batch)
+    support_data_batch, query_data_batch = uncollate(sampler, batch)
     return _collate(support_data_batch, oh_labels), _collate(query_data_batch, oh_labels)
 
 
