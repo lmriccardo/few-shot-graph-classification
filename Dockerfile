@@ -8,12 +8,12 @@ RUN apt-get install -y python3-pip && ln -sf pip3 /usr/bin/pip
 
 # Install required packages
 RUN pip install --no-cache-dir -U pip
-RUN pip install --no-cache-dir https://download.pytorch.org/whl/cu116/torch-1.12.1%2Bcu116-cp310-cp310-linux_x86_64.whl
+RUN pip install --no-cache-dir torch
 RUN pip install --no-cache-dir torch-scatter     \
                                torch-sparse      \
                                torch-cluster     \
                                torch-spline-conv \
-                               torch-geometric -f https://data.pyg.org/whl/torch-1.12.0+cu116.html
+                               torch-geometric -f https://data.pyg.org/whl/torch-1.12.0+cpu.html
 RUN pip install --no-cache-dir numpy matplotlib plotly networkx sklearn wrapt rich
 
 # Add a new no-sudo user and disable root login
