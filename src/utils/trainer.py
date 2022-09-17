@@ -18,7 +18,7 @@ from utils.utils import elapsed_time, setup_seed, \
                         compute_accuracy
 from utils.kfold import KFoldCrossValidationWrapper
 
-from typing import Union, Tuple, List, Optional
+from typing import Union, Tuple, List, Optional, Dict, Any
 from tqdm import tqdm
 
 import logging
@@ -50,29 +50,20 @@ class Trainer:
     """
     def __init__(
         self, train_ds: GraphDataset | OHGraphDataset, val_ds: GraphDataset | OHGraphDataset,
-        logger: logging.Logger, model_name: str="sage", paper: bool=False, epochs: int=200,
-        batch_size: int=1, dataset_name: str="TRIANGLES", meta_model: Optional[AdaptiveStepMAML]=None,
-        save_suffix: str="", dataloader_type: FewShotDataLoader | GraphDataLoader=FewShotDataLoader,
-        use_mevolve: bool=False, use_flag: bool=False, use_gmixup: bool=False
+        logger: logging.Logger, meta_model: Optional[AdaptiveStepMAML]=None, save_suffix: str="_",
+        dataloader_type: FewShotDataLoader | GraphDataLoader=FewShotDataLoader, paper: bool=False, **kwargs
     ) -> None:
-
-        # Cannot use more than one GDA technique at the same time
-        assert sum([use_mevolve, use_flag, use_gmixup]) < 2, "Cannot use more than one GDA technique at the same time"
-
+        # .
         self.train_ds       = train_ds
         self.validation_ds  = val_ds
         self.logger         = logger
-        self.model_name     = model_name
         self.paper          = paper
-        self.epochs         = epochs
-        self.dataset_name   = dataset_name
-        self.batch_size     = batch_size
         self.meta_model_cls = meta_model
         self.save_suffix    = save_suffix
         self.dataloader     = dataloader_type
-        self.use_mevolve    = use_mevolve
-        self.use_gmixup     = use_gmixup
-        self.use_flag       = use_flag
+        self.kwargs         = kwargs
+        
+        self._setattr(kwargs)
 
         # Control if the two datasets have OHE labels
         self.is_train_oh      = isinstance(self.train_ds, OHGraphDataset)
@@ -92,13 +83,18 @@ class Trainer:
         if self.meta_model_cls is not None:
             self.meta_model = self._get_meta_model()
 
+    def _setattr(self, kwargs: Dict[str, Any]) -> None:
+        """Set the attribute in the kwargs dict"""
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
     def _get_model(self) -> Union[GCN4MAML, SAGE4MAML]:
         """Return the model to use with the MetaModel"""
         models = {"sage" : SAGE4MAML, "gcn" : GCN4MAML}
         model = models[self.model_name](
             num_classes=config.TRAIN_WAY, paper=self.paper,
-            num_features=config.NUM_FEATURES[self.dataset_name]
-        ).to(config.DEVICE)
+            num_features=config.NUM_FEATURES[self.data_name]
+        ).to(self.device)
 
         self.logger.debug(f"Creating model of type {model.__class__.__name__}")
         return model
@@ -108,8 +104,8 @@ class Trainer:
     ]:
         """Return train and validation dataloader"""
         train_dataloader = get_dataloader(
-            ds=self.train_ds, n_way=config.TRAIN_WAY, k_shot=config.TRAIN_SHOT,
-            n_query=config.TRAIN_QUERY, epoch_size=config.TRAIN_EPISODE,
+            ds=self.train_ds, n_way=self.train_way, k_shot=self.train_shot,
+            n_query=self.train_query, epoch_size=self.train_episode,
             shuffle=True, batch_size=self.batch_size,
             oh_labels=self.is_train_oh, dl_type=self.dataloader
         )
@@ -119,8 +115,8 @@ class Trainer:
         ))
 
         validation_dataloader = get_dataloader(
-            ds=self.validation_ds, n_way=config.TEST_WAY, k_shot=config.VAL_SHOT,
-            n_query=config.VAL_QUERY, epoch_size=config.VAL_EPISODE,
+            ds=self.validation_ds, n_way=self.test_way, k_shot=self.val_shot,
+            n_query=self.val_query, epoch_size=self.val_episode,
             shuffle=True, batch_size=self.batch_size,
             oh_labels=self.is_validation_oh, dl_type=self.dataloader
         )
@@ -138,27 +134,27 @@ class Trainer:
         ))
 
         mm_configuration = {
-            "inner_lr"           : config.INNER_LR,
-            "train_way"          : config.TRAIN_WAY,
-            "train_shot"         : config.TRAIN_SHOT,
-            "train_query"        : config.TRAIN_QUERY,
-            "grad_clip"          : config.GRAD_CLIP,
-            "batch_per_episodes" : config.BATCH_PER_EPISODES,
+            "inner_lr"           : self.inner_lr,
+            "train_way"          : self.train_way,
+            "train_shot"         : self.train_shot,
+            "train_query"        : self.train_query,
+            "grad_clip"          : self.grad_clip,
+            "batch_per_episodes" : self.batch_episode,
             "flexible_step"      : config.FLEXIBLE_STEP,
-            "min_step"           : config.MIN_STEP,
-            "max_step"           : config.MAX_STEP,
+            "min_step"           : self.min_step,
+            "max_step"           : self.max_step,
             "step_test"          : config.STEP_TEST,
-            "step_penalty"       : config.STEP_PENALITY,
+            "step_penalty"       : self.penality,
             "use_score"          : config.USE_SCORE,
             "use_loss"           : config.USE_LOSS,
-            "outer_lr"           : config.OUTER_LR,
-            "stop_lr"            : config.STOP_LR,
-            "patience"           : config.PATIENCE,
+            "outer_lr"           : self.outer_lr,
+            "stop_lr"            : self.stop_lr,
+            "patience"           : self.patience,
             "paper"              : self.paper,
-            "weight_decay"       : config.WEIGHT_DECAY
+            "weight_decay"       : self.weight_decay
         }
 
-        meta = self.meta_model_cls(self.model, mm_configuration).to(config.DEVICE)
+        meta = self.meta_model_cls(self.model, mm_configuration).to(self.device)
         self.model2save = meta
         
         if self.is_train_oh or self.is_validation_oh:
@@ -183,17 +179,18 @@ class Trainer:
         if not flag_data:
             self.use_flag = False
 
-        if config.DEVICE != "cpu":
+        if self.device != "cpu":
             support_data = support_data.pin_memory()
-            support_data = support_data.to(config.DEVICE)
+            support_data = support_data.to(self.device)
 
             query_data = query_data.pin_memory()
-            query_data = query_data.to(config.DEVICE)
+            query_data = query_data.to(self.device)
 
         @FlagGDA.flag(
             gnn=self.model, criterion=self.meta_model.loss, data=flag_data, 
-            targets=flag_data.y, iterations=config.M, step_size=config.ATTACK_STEP_SIZE, 
-            use=self.use_flag, optimizer=self.meta_model.meta_optim, oh_labels=self.is_train_oh
+            targets=flag_data.y, iterations=self.flag_m, step_size=self.ass, 
+            use=self.use_flag, optimizer=self.meta_model.meta_optim, 
+            oh_labels=self.is_train_oh, device=self.device
         )
         def _run(*args, **kwargs) -> Tuple[List[float], List[float]]:
             # If we use the GPU then we need to set the GPU
@@ -211,7 +208,7 @@ class Trainer:
                         np.mean(train_accs), 
                         np.mean(train_final_losses), 
                         np.mean(train_total_losses)
-                    ), file=sys.stdout if not config.FILE_LOGGING else open(
+                    ), file=sys.stdout if not self.file_log else open(
                             self.logger.handlers[1].baseFilename, mode="a"
                         )
                     )
@@ -226,13 +223,14 @@ class Trainer:
         loop_counter: int, criterion: _Loss | _WeightedLoss, optimizer: optim.Optimizer
     ) -> None:
         """Run one step of single and simple training"""
-        if config.DEVICE != "cpu":
-            data = data.to(config.DEVICE)
+        if self.device != "cpu":
+            data = data.to(self.device)
         
         @FlagGDA.flag(
             gnn=self.model, criterion=criterion, data=data, 
-            targets=data.y, iterations=config.M, step_size=config.ATTACK_STEP_SIZE, 
-            use=self.use_flag, optimizer=optimizer, oh_labels=self.is_train_oh
+            targets=data.y, iterations=self.flag_m, step_size=self.ass, 
+            use=self.use_flag, optimizer=optimizer, 
+            oh_labels=self.is_train_oh, device=self.device
         )
         def _run(*args, **kwargs) -> None:
             optimizer.zero_grad()
@@ -254,7 +252,7 @@ class Trainer:
                         np.mean(train_accs), 
                         train_final_losses[-1], 
                         np.mean(train_total_losses)
-                    ), file=sys.stdout if not config.FILE_LOGGING else open(
+                    ), file=sys.stdout if not self.file_log else open(
                             self.logger.handlers[1].baseFilename, mode="a"
                         )
                     )
@@ -270,7 +268,10 @@ class Trainer:
         @KFoldCrossValidationWrapper.kFold_validation(
             trainer=self, logger=self.logger,
             loss=self.meta_model.loss, use=self.use_mevolve,
-            oh_labels=self.is_train_oh, dl_type=self.dataloader
+            oh_labels=self.is_train_oh, dl_type=self.dataloader,
+            train_way=self.train_way, train_shot=self.train_shot,
+            train_query=self.train_query, train_episode=self.train_episode,
+            n_fold=self.n_fold, device=self.device
         )
         def _run(train_dl: Optional[FewShotDataLoader | GraphDataLoader]=None) -> None:
             self.meta_model.train()
@@ -303,15 +304,18 @@ class Trainer:
         """Run the basic training"""
         train_dataloader = None
         criterion = nn.CrossEntropyLoss() if not self.is_train_oh else OHECrossEntropy()
-        optimizer = optim.Adam(self.model.parameters(), lr=config.OUTER_LR, weight_decay=config.WEIGHT_DECAY)
+        optimizer = optim.Adam(self.model.parameters(), lr=self.outer_lr, weight_decay=config.WEIGHT_DECAY)
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode='min', factor=0.5, patience=config.PATIENCE, verbose=True, min_lr=1e-5
+            optimizer, mode='min', factor=0.5, patience=self.patience, verbose=True, min_lr=1e-5
         )
 
         @KFoldCrossValidationWrapper.kFold_validation(
             trainer=self, logger=self.logger,
             loss=self.meta_model.loss, use=self.use_mevolve,
-            oh_labels=self.is_train_oh, dl_type=self.dataloader
+            oh_labels=self.is_train_oh, dl_type=self.dataloader,
+            train_way=self.train_way, train_shot=self.train_shot,
+            train_query=self.train_query, train_episode=self.train_episode,
+            n_fold=self.n_fold, device=self.device
         )
         def _run(train_dl: Optional[FewShotDataLoader | GraphDataLoader]=None) -> None:
             self.meta_model.train()
@@ -347,18 +351,18 @@ class Trainer:
                         query_data   : Optional[pyg_data.Data]=None
     ) -> None:
         """Run validation step"""
-        if config.DEVICE != "cpu":
+        if self.device != "cpu":
             support_data = support_data.pin_memory()
-            support_data = support_data.to(config.DEVICE)
+            support_data = support_data.to(self.device)
 
         # If both support_data and query_data are given
         # then we have to run the finetuning of the meta model
         # otherwise, if only support_data is not None then
         # this means that we have to run a simple validation step
         if query_data is not None:
-            if config.DEVICE != "cpu":
+            if self.device != "cpu":
                 query_data = query_data.pin_memory()
-                query_data = query_data.to(config.DEVICE)
+                query_data = query_data.to(self.device)
 
             accs, step, _, _, _ = self.meta_model.finetuning(support_data, query_data)
             val_accs.append(accs[step])
@@ -403,7 +407,7 @@ class Trainer:
         for epoch in range(self.epochs):
             setup_seed(epoch)
             print("=" * 103)
-            print("=" * 103, file=sys.stdout if not config.FILE_LOGGING else open(
+            print("=" * 103, file=sys.stdout if not self.file_log else open(
                     self.logger.handlers[1].baseFilename, mode="a"
                 )
             )
@@ -417,7 +421,7 @@ class Trainer:
             val_acc_avg = np.mean(val_accs)
             train_acc_avg = np.mean(train_accs)
             train_loss_avg = np.mean(train_final_losses)
-            val_acc_ci95 = 1.96 * np.std(np.array(val_accs)) / np.sqrt(config.VAL_EPISODE)
+            val_acc_ci95 = 1.96 * np.std(np.array(val_accs)) / np.sqrt(self.val_episode)
 
             if val_acc_avg > max_val_acc:
                 max_val_acc = val_acc_avg
@@ -425,7 +429,7 @@ class Trainer:
 
                 torch.save({'epoch': epoch, 'embedding': self.model2save.state_dict()
                     }, os.path.join(
-                        config.MODELS_SAVE_PATH, 
+                        self.save_path, 
                         f'{self.dataset_name}_{self.save_suffix}BestModel.pth'
                     )
                 )
@@ -440,7 +444,7 @@ class Trainer:
                     val_acc_avg, val_acc_ci95, max_val_acc
                 )
 
-            print(printable_string, file=sys.stdout if not config.FILE_LOGGING else open(
+            print(printable_string, file=sys.stdout if not self.file_log else open(
                     self.logger.handlers[1].baseFilename, mode="a"
                 )
             )
@@ -457,9 +461,11 @@ class Trainer:
         # If use_mevolve is set to True then we need to invoke the MEvolve class
         if self.use_mevolve:
             me = MEvolveGDA(
-                trainer=self, n_iters=config.ITERATIONS,
+                trainer=self, n_iters=self.iters,
                 logger=self.logger, train_ds=self.train_ds,
-                validation_ds=self.validation_ds
+                validation_ds=self.validation_ds,
+                threshold_beta=self.lrtb, threshold_steps=self.lrts,
+                heuristic=self.heuristic
             )
 
             _ = me.evolve()

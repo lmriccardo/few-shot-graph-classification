@@ -11,7 +11,6 @@ from data.dataloader import GraphDataLoader
 from utils.utils import rename_edge_indexes, to_pygdata
 from typing import Dict, List, Tuple, Any
 
-import config
 import networkx as nx
 import logging
 import random
@@ -35,14 +34,18 @@ class MEvolveGDA:
     """
     def __init__(self, 
         trainer: 'utils.train.Trainer', n_iters: int, logger: logging.Logger,
-        train_ds: GraphDataset, validation_ds: GraphDataset
+        train_ds: GraphDataset, validation_ds: GraphDataset,
+        threshold_beta: float, threshold_steps: int, heuristic: str="random_mapping"
     ) -> None:
-        self.trainer = trainer
-        self.n_iters = n_iters
-        self.train_ds = train_ds
-        self.validation_ds = validation_ds
-        self.logger = logger
+        self.trainer           = trainer
+        self.n_iters           = n_iters
+        self.train_ds          = train_ds
+        self.validation_ds     = validation_ds
+        self.logger            = logger
         self.pre_trained_model = self.trainer.model
+        self.threshold_beta    = threshold_beta
+        self.threshold_steps   = threshold_steps
+        self.heuristic         = heuristic
  
     @staticmethod
     def compute_threshold(graph_probability_vector: torch.Tensor,
@@ -50,7 +53,9 @@ class MEvolveGDA:
                           total_ri                : torch.Tensor,
                           lr                      : float,
                           theta                   : torch.Tensor,
-                          decay                   : float) -> float:
+                          decay                   : float,
+                          threshold_beta          : float,
+                          threshold_steps         : int) -> float:
         """
         Compute the threshold for the label reliability acceptation.
         This threshold is the result of the following expression
@@ -65,6 +70,8 @@ class MEvolveGDA:
         :param lr: learning rate for optimization problem
         :param decay: for lr adaptation
         :param theta: the parameter to optimize
+        :param threshold_beta: the beta parameter for tanh approximation
+        :param threshold_steps: how many step of GD to run before stopping
         :return: the optimal threshold
         """
         def g_function() -> torch.Tensor:
@@ -95,14 +102,14 @@ class MEvolveGDA:
             # to the variable Theta (which we have to differentiate)
             # The chosen approximation is the tanh function using a 
             # value for beta >> 1. 
-            sign_approximation = torch.tanh(config.LABEL_REL_THRESHOLD_BETA * mul)
+            sign_approximation = torch.tanh(threshold_beta * mul)
             zero = torch.zeros((sign_approximation.shape[0],))
             return torch.maximum(zero, sign_approximation)
 
         g_values = g_function()
         current_step = 0
         current_minimum = float('inf')
-        while current_step < config.LABEL_REL_THRESHOLD_STEPS and theta.data.item() != 0.0:
+        while current_step < threshold_steps and theta.data.item() != 0.0:
             f = phi(theta, total_ri, g_values).sum()
             f.backward()
 
@@ -125,11 +132,12 @@ class MEvolveGDA:
                        data_list               : List[Data],
                        classes                 : List[int],
                        classifier_model        : torch.nn.Module,
-                       logger                  : logging.Logger,
                        augmented_data          : List[Tuple[Dict[str, Any], str]],
                        lr                      : float,
                        theta                   : torch.Tensor,
-                       decay                   : float) -> List[Tuple[Dict[str, Any], str]]:
+                       decay                   : float,
+                       threshold_beta          : float,
+                       threshold_steps         : int) -> List[Tuple[Dict[str, Any], str]]:
         """
         After applying the heuristic for data augmentation, we have a
         bunch of new graphs and respective labels that needs to be
@@ -149,6 +157,8 @@ class MEvolveGDA:
         :param lr: learning rate for optimization problem
         :param decay: for lr adaptation
         :param theta: the parameter to optimize
+        :param threshold_beta: the beta parameter for tanh approximation
+        :param threshold_steps: how many step of GD to run before stopping
 
         :return: the list of graphs and labels that are reliable to be added
         """
@@ -175,7 +185,8 @@ class MEvolveGDA:
         # Compute the label reliability threshold theta
         label_rel_threshold = MEvolveGDA.compute_threshold(
             graph_probability_vector, data_list, 
-            label_reliabilities, lr, theta, decay
+            label_reliabilities, lr, theta, decay,
+            threshold_beta, threshold_steps
         )
         print(f"Computed new label reliability threshold to {label_rel_threshold}")
 
@@ -218,14 +229,15 @@ class MEvolveGDA:
             self.trainer.train()
 
         current_iteration = 0
-        print("Starting Model-Evolution Graph Data Augmentation Technique")
+        print(f"Starting Model-Evolution Graph Data Augmentation Technique")
+        print(f"USING HEURISTIC - {self.heuristic}")
         print("==========================================================")
 
         while current_iteration < self.n_iters:
             print(f"MODEL-EVOLUTION ITERATION NUMBER: {current_iteration}/{self.n_iters}")
 
             # 1. Get augmented Data
-            d_pool = augment_dataset(self.train_ds, heuristic=config.HEURISTIC)
+            d_pool = augment_dataset(self.train_ds, heuristic=self.heuristic)
 
             # 2. Compute the graph probability vector
             val_dl = GraphDataLoader(self.validation_ds, batch_size=self.pre_trained_model.num_classes, drop_last=True)
@@ -240,7 +252,7 @@ class MEvolveGDA:
             filtered_data = self.data_filtering(
                 self.validation_ds, prob_matrix, validation_data_list, 
                 self.validation_ds.classes, self.pre_trained_model,
-                self.logger, d_pool, lr, theta, decay
+                self.logger, d_pool, lr, theta, decay, self.threshold_beta, self.threshold_steps
             )
 
             print(f"Number of new generated data: {len(filtered_data)}")
@@ -252,7 +264,7 @@ class MEvolveGDA:
             print(f"The new training set has dimension: {len(self.train_ds)}")
 
             # 5. Re run the trainer
-            self.trainer.train()
+            self.trainer.run()
 
             # 6. Increment the iteration counter
             current_iteration += 1

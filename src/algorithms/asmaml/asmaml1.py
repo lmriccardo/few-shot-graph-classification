@@ -4,39 +4,45 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-
 import torch_geometric.data as gdata
-
-import numpy as np
 
 from models.stopcontrol import StopControl
 
+import numpy as np
 import config
 import math
 
 
 class AdaptiveStepMAML(nn.Module):
     """ The Meta-Learner Class """
-    def __init__(self, model, inner_lr, outer_lr, stop_lr, weight_decay, paper) -> None:
-        super().__init__()
-        self.net          = model
-        self.inner_lr     = inner_lr
-        self.outer_lr     = outer_lr
-        self.stop_lr      = stop_lr
-        self.weight_decay = weight_decay
-        self.paper        = paper
+    def __init__(self, model: torch.Module, paper: bool=False, **kwargs) -> None:
+        super(AdaptiveStepMAML, self).__init__()
+        
+        self.net                = model
+        self.paper              = paper
+        self.inner_lr           = kwargs["inner_lr"]
+        self.outer_lr           = kwargs["outer_lr"]
+        self.stop_lr            = kwargs["stop_lr"]
+        self.weight_decay       = kwargs["weight_decay"]
+        self.max_step           = kwargs["max_step"]
+        self.min_step           = kwargs["min_step"]
+        self.grad_clip          = kwargs["grad_clip"]
+        self.flexible_step      = kwargs["flexible_step"]
+        self.step_test          = kwargs["step_test"]
+        self.step_penality      = kwargs["step_penality"]
+        self.batch_per_episodes = kwargs["batch_per_episodes"]
 
         self.task_index = 1
 
         self.stop_prob = 0.5
-        self.stop_gate = StopControl(config.STOP_CONTROL_INPUT_SIZE, config.STOP_CONTROL_HIDDEN_SIZE)
+        self.stop_gate = StopControl(kwargs["scis"], kwargs["schs"])
 
         self.meta_optim = self.configure_optimizers()
 
         self.loss      = nn.CrossEntropyLoss()
         self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
             self.meta_optim, mode="min", factor=0.5, 
-            patience=config.PATIENCE, verbose=True, min_lr=1e-05
+            patience=kwargs["patience"], verbose=True, min_lr=1e-05
         )
 
         self.graph_embs = []
@@ -61,32 +67,23 @@ class AdaptiveStepMAML(nn.Module):
         noless = 1.0 - less
         log_weight = less * -1 + noless * torch.log(weight_abs + eps) / p
         sign = less * math.exp(p) * weight + noless * weight.sign()
+
         if torch.sum(torch.isnan(log_weight)) != 0:
-            print("Log weight: ", log_weight)
-            print("Weight: ", weight)
             raise AssertionError('stop_gate input has nan')
+
         return log_weight, sign
 
     def stop(self, step: int, loss: float, node_score: torch.Tensor):
         stop_hx = None
-        if config.FLEXIBLE_STEP and step < config.MAX_STEP:
+        if step < self.max_step:
             inputs = []
 
-            if config.USE_LOSS:
-                inputs += [loss.detach()]
-            if config.USE_SCORE:
-                score = node_score.detach()
-                inputs += [score]
+            inputs += [loss.detach()]
+            score = node_score.detach()
+            inputs += [score]
 
             inputs = torch.stack(inputs, dim=0).unsqueeze(0)
-            
-            try:
-                inputs = self.smooth(inputs)[0]
-            except AssertionError:
-                print(inputs)
-                print(loss)
-                raise AssertionError()
-
+            inputs = self.smooth(inputs)[0]
             stop_gate, stop_hx = self.stop_gate(inputs, stop_hx)
 
             return stop_gate
@@ -103,8 +100,6 @@ class AdaptiveStepMAML(nn.Module):
         return epoch_learning_rate[0]
 
     def forward(self, support_data: gdata.batch.Batch, query_data: gdata.batch.Batch):
-        # In the paper's code, they compute the so-called task_num. 
-        # However, it's value is always 1. For this reason, I decided to not use it
         if self.paper:
             (support_nodes, support_edge_index, support_graph_indicator, support_label) = support_data
             (query_nodes, query_edge_index, query_graph_indicator, query_label) = query_data
@@ -124,45 +119,28 @@ class AdaptiveStepMAML(nn.Module):
         self.stop_prob = 0.1 if self.stop_prob < 0.1 else self.stop_prob
 
         # Get adaptation step
-        ada_step = min(config.MAX_STEP, config.MIN_STEP + int(1.0 / self.stop_prob))
+        ada_step = min(self.max_step, self.min_step + int(1.0 / self.stop_prob))
 
         for k in range(0, ada_step):
             # Run the i-th task and compute the loss
-            if not self.paper:
-                logits, score, _ = self.net(support_data.x, support_data.edge_index, support_data.batch)
-                loss = self.compute_loss(logits, support_data.y)
-            else:
-                logits, score, _ = self.net(support_nodes[0], support_edge_index[0], support_graph_indicator[0])
-                loss = self.compute_loss(logits, support_label[0])
+            support_nodes_ = support_nodes[0] if self.paper else support_data.x
+            support_edge_index_ = support_edge_index[0] if self.paper else support_data.edge_index
+            support_graph_indicator_ = support_graph_indicator[0] if self.paper else support_data.batch
+            support_label_ = support_label[0] if self.paper else support_data.y
 
-            stop_probability = 0
-            try:
-                if config.FLEXIBLE_STEP:
-                    stop_probability = self.stop(k, loss, score)
-                    self.stop_prob = stop_probability
-            except AssertionError:
-                print("Logits: ", logits)
-                print("Score: ", score)
-                print(self.net.parameters())
-                print("Y: ", support_data.y)
-                print("Edge Index: ", support_data.edge_index)
-                print("X: ", support_data.x)
-                print("Loss: ", loss)
+            logits, score, _ = self.net(support_nodes_, support_edge_index_, support_graph_indicator_)
+            loss = self.compute_loss(logits, support_label_)
+            grad = torch.autograd.grad(loss, fast_parameters, create_graph=True)
 
-                import sys
-                sys.exit(1)
-            
-            stop_gates.append(stop_probability)
+            stop_pro = self.stop(k, loss, score)
+            self.stop_prob = stop_pro
+            stop_gates.append(stop_pro)
             scores.append(score.item())
 
             with torch.no_grad():
                 pred = F.softmax(logits, dim=1).argmax(dim=1)
-                if not self.paper:
-                    correct = torch.eq(pred, support_data.y).sum().item()
-                    train_accs.append(correct / support_data.y.shape[0])
-                else:
-                    correct = torch.eq(pred, support_label[0]).sum().item()
-                    train_accs.append(correct / support_label.size(0))
+                correct = torch.eq(pred, support_label_).sum().item()
+                train_accs.append(correct / support_label_.size(0))
 
             step = k
             train_losses.append(loss.item())
@@ -178,21 +156,18 @@ class AdaptiveStepMAML(nn.Module):
                 
                 fast_parameters.append(weight.fast)
             
-            if not self.paper:
-                logits_q, _, _ = self.net(query_data.x, query_data.edge_index, query_data.batch)
-                loss_q = self.compute_loss(logits_q, query_data.y)
-            else:
-                logits_q, _, _ = self.net(query_nodes[0], query_edge_index[0], query_graph_indicator[0])
-                loss_q = self.compute_loss(logits_q, query_label[0])
+            query_nodes_ = query_nodes[0] if self.paper else query_data.x
+            query_edge_index_ = query_edge_index[0] if self.paper else query_data.edge_index
+            query_graph_indicator_ = query_graph_indicator[0] if self.paper else query_data.batch
+            query_label_ = query_label[0] if self.paper else query_data.y
 
+            logits_q, _ ,_= self.net(query_nodes_, query_edge_index_, query_graph_indicator_)
+            loss_q = self.com_loss(logits_q,query_label_)
             losses_q.append(loss_q)
 
             with torch.no_grad():
                 pred_q = F.softmax(logits_q, dim=1).argmax(dim=1)
-                if not self.paper:
-                    correct = torch.eq(pred_q, query_data.y).sum().item()
-                else:
-                    correct = torch.eq(pred_q, query_label[0]).sum().item()
+                correct = torch.eq(pred_q, query_label_).sum().item()  # convert to numpy
                 corrects.append(correct)
         
         final_loss = losses_q[step]
@@ -200,31 +175,26 @@ class AdaptiveStepMAML(nn.Module):
         final_acc = accs[step]
         total_loss = 0
 
-        if config.FLEXIBLE_STEP:
-            for step, (stop_gate, step_acc) in enumerate(zip(stop_gates[config.MIN_STEP - 1:], accs[config.MIN_STEP - 1:])):
-                assert stop_gate >= 0.0 and stop_gate <= 1.0, "stop_gate error value: {:.5f}".format(stop_gate)
-                log_prob = torch.log(1 - stop_gate)
-                tem_loss = - log_prob * ((final_acc - step_acc - (np.exp(step) - 1) * config.STEP_PENALITY))
-                total_loss += tem_loss
+        for step, (stop_gate, step_acc) in enumerate(zip(stop_gates[self.min_step - 1:], accs[self.min_step - 1:])):
+            assert stop_gate >= 0.0 and stop_gate <= 1.0, "stop_gate error value: {:.5f}".format(stop_gate)
+            log_prob = torch.log(1 - stop_gate)
+            tem_loss = - log_prob * ((final_acc - step_acc - (np.exp(step) - 1) * self.step_penality))
+            total_loss += tem_loss
 
-            total_loss = (total_loss + final_acc + final_loss)
-        else:
-            total_loss = final_loss
-
+        total_loss = (total_loss + final_acc + final_loss)
         total_loss.backward()
 
-        if self.task_index == config.BATCH_PER_EPISODES:
-            if config.GRAD_CLIP > 0.1:
-                torch.nn.utils.clip_grad_norm_(self.parameters(), config.GRAD_CLIP)
+        if self.task_index == self.batch_per_episodes:
+            if self.grad_clip > 0.1:
+                torch.nn.utils.clip_grad_norm_(self.parameters(), self.grad_clip)
 
             self.meta_optim.step()
             self.meta_optim.zero_grad()
             self.task_index = 1
         else:
             self.task_index += 1
-        
-        if config.FLEXIBLE_STEP:
-            stop_gates = [stop_gate.item() for stop_gate in stop_gates]
+
+        stop_gates = [stop_gate.item() for stop_gate in stop_gates]
 
         return accs * 100, step, final_loss.item(), total_loss.item(), stop_gates, scores, train_losses, train_accs
 
@@ -245,34 +215,21 @@ class AdaptiveStepMAML(nn.Module):
         for weight in self.net.parameters():
             weight.fast = None
         
-        ada_step = min(config.STEP_TEST, config.MIN_STEP + int(2 / self.stop_prob))
+        ada_step = min(self.step_test, self.min_step + int(2 / self.stop_prob))
 
         for k in range(ada_step):
-            if not self.paper:
-                logits, score, _ = self.net(support_data.x, support_data.edge_index, support_data.batch)
-                loss = self.compute_loss(logits, support_data.y)
-            else:
-                logits, score, _ = self.net(support_nodes[0], support_edge_index[0], support_graph_indicator[0])
-                loss = self.compute_loss(logits, support_label[0])
+            support_nodes_ = support_nodes[0] if self.paper else support_data.x
+            support_edge_index_ = support_edge_index[0] if self.paper else support_data.edge_index
+            support_graph_indicator_ = support_graph_indicator[0] if self.paper else support_data.batch
+            support_label_ = support_label[0] if self.paper else support_data.y
 
-            stop_probability = 0
+            logits,score,_ = self.net(support_nodes_, support_edge_index_, support_graph_indicator_)
+            loss = self.compute_loss(logits, support_label_)
 
-            try:
-                if config.FLEXIBLE_STEP:
-                    with torch.no_grad():
-                        stop_probability = self.stop(k, loss, score)
-            except AssertionError:
-                print("Logits: ", logits)
-                print("Score: ", score)
-                print("Y: ", support_data.y)
-                print("Edge Index: ", support_data.edge_index)
-                print("X: ", support_data.x)
-                print("Loss: ", loss)
+            stop_pro = self.stop(k, loss, score)
+            self.stop_prob = stop_pro
+            stop_gates.append(stop_pro)
 
-                import sys
-                sys.exit(1)
-            
-            stop_gates.append(stop_probability)
             step = k
             scores.append(score.item())
 
@@ -281,19 +238,19 @@ class AdaptiveStepMAML(nn.Module):
 
             for index, weight in enumerate(self.net.parameters()):
                 if weight.fast is None:
-                    weight.fast = weight - config.INNER_LR * grad[index]
+                    weight.fast = weight - self.inner_lr * grad[index]
                 else:
-                    weight.fast = weight.fast - config.INNER_LR * grad[index]
+                    weight.fast = weight.fast - self.inner_lr * grad[index]
 
                 fast_parameters.append(weight.fast)
 
-            if not self.paper:
-                logits_q, _, graph_emb = self.net(query_data.x, query_data.edge_index, query_data.batch)
-                self.graph_labels.append(query_data.y)
-            else:
-                logits_q, _, graph_emb = self.net(query_nodes[0], query_edge_index[0], query_graph_indicator[0])
-                self.graph_labels.append(query_label[0])
+            query_nodes_ = query_nodes[0] if self.paper else query_data.x
+            query_edge_index_ = query_edge_index[0] if self.paper else query_data.edge_index
+            query_graph_indicator_ = query_graph_indicator[0] if self.paper else query_data.batch
+            query_label_ = query_label[0] if self.paper else query_data.y
 
+            logits_q, _, graph_emb = self.net(query_nodes_, query_edge_index_, query_graph_indicator_)
+            self.graph_labels.append(query_label_.reshape(-1))
             self.graph_embs.append(graph_emb)
 
             if self.index % 1 == 0:
@@ -305,23 +262,12 @@ class AdaptiveStepMAML(nn.Module):
             
             with torch.no_grad():
                 pred_q = F.softmax(logits_q, dim=1).argmax(dim=1)
-                if not self.paper:
-                    correct = torch.eq(pred_q, query_data.y).sum().item()
-                else:
-                    correct = torch.eq(pred_q, query_label[0]).sum().item()
-
+                correct = torch.eq(pred_q, query_label_).sum().item()  # convert to numpy
                 corrects.append(correct)
-
-                if not self.paper:
-                    loss_query = self.compute_loss(logits_q, query_data.y)
-                else:
-                    loss_query = self.compute_loss(logits_q, query_label[0])
-                    
+                loss_query=self.com_loss(logits_q,query_label_)
                 query_loss.append(loss_query.item())
 
         accs = 100 * np.array(corrects) / query_size
-
-        if config.FLEXIBLE_STEP:
-            stop_gates = [stop_gate.item() for stop_gate in stop_gates]
+        stop_gates = [stop_gate.item() for stop_gate in stop_gates]
 
         return accs, step, stop_gates, scores, query_loss

@@ -30,9 +30,6 @@ def main() -> None:
 
     # Configurations for the AS-MAML Model
     parser.add_argument('--batch-size',    help="Dimension of a batch",                            type=int,   default=1)
-    parser.add_argument('--nhid',          help="Number of hidden dimension",                      type=int,   default=config.NHID)
-    parser.add_argument('--pool-ratio',    help="The pooling ratio",                               type=float, default=config.POOLING_RATIO)
-    parser.add_argument('--drop-ratio',    help="The dropout ratio",                               type=float, default=config.DROPOUT_RATIO)
     parser.add_argument('--outer_lr',      help="Initial LR for the model",                        type=float, default=config.OUTER_LR)
     parser.add_argument('--inner_lr',      help="Initial LR for the meta model",                   type=float, default=config.INNER_LR)
     parser.add_argument('--stop_lr',       help="Initial LR for the Stop model",                   type=float, default=config.STOP_LR)
@@ -63,7 +60,6 @@ def main() -> None:
     parser.add_argument('--heuristic', help="The Heuristic to use",                         type=str,   default=config.HEURISTIC)
     parser.add_argument('--lrts',      help="The label reliability step thresholds",        type=int,   default=config.LABEL_REL_THRESHOLD_STEPS)
     parser.add_argument('--lrtb',      help="The beta used for approximation of the tanh",  type=int,   default=config.LABEL_REL_THRESHOLD_BETA)
-    parser.add_argument('--lrtss',     help="The label reliability threshold step size",    type=float, default=config.LABEL_REL_THRESHOLD_STEP_SIZE)
 
     # FLAG configurations
     parser.add_argument('--flag-m', help="The number of iterations of FLAG", type=int,   default=config.M)
@@ -81,15 +77,12 @@ def main() -> None:
         "log_path"      : args.log_path,
         "file_log"      : args.file_log,
         "save_path"     : args.save_path,
-        "model"         : args.model,
+        "model_name"    : args.model,
         "use_asmaml"    : args.not_as_maml,
         "use_gmixup"    : args.g_mixup,
         "use_flag"      : args.flag,
         "use_mevolve"   : args.m_evolve,
         "batch_size"    : args.batch_size,
-        "nhid"          : args.nihd,
-        "pool_ratio"    : args.pool_ratio,
-        "drop_ratio"    : args.drop_ratio,
         "outer_lr"      : args.outer_lr,
         "innter_lr"     : args.inner_lr,
         "stop_lr"       : args.stop_lr,
@@ -118,7 +111,6 @@ def main() -> None:
         "heuristic"     : args.heuristic,
         "lrts"          : args.lrts,
         "lrtb"          : args.lrtb,
-        "lrtss"         : args.lrtss,
         "flag_m"        : args.flag_m,
         "ass"           : args.ass
     }

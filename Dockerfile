@@ -33,4 +33,4 @@ WORKDIR $HOME/app/src/
 # Set the user to use inside the container
 USER fsgc:fsgc-group
 
-ENTRYPOINT ["uname", "-r"]
+CMD ["/bin/bash"]

@@ -9,7 +9,6 @@ from torch_geometric.data import Data
 from utils.utils import compute_accuracy
 from typing import Union, Tuple, Callable, Any, List, Dict
 
-import config
 import wrapt
 
 
@@ -37,7 +36,8 @@ class FlagGDA:
              iterations : int,
              step_size  : float,
              use        : bool=True,
-             oh_labels  : bool=False) -> Callable[
+             oh_labels  : bool=False,
+             device     : str="cpu") -> Callable[
                 [Callable[[Any], Any], List[Any], Dict[Any, Any]], 
                 Tuple[float, float, nn.Module, torch.Tensor]
     ]:
@@ -68,7 +68,7 @@ class FlagGDA:
                 gnn.train()
                 optimizer.zero_grad()
 
-                perturbation = torch.FloatTensor(*data.x.shape).uniform_(-step_size, step_size).to(config.DEVICE)
+                perturbation = torch.FloatTensor(*data.x.shape).uniform_(-step_size, step_size).to(device)
                 perturbation.requires_grad_()
                 logits, _, _ = gnn(data.x + perturbation, data.edge_index, data.batch)
                 loss = criterion(logits, targets)

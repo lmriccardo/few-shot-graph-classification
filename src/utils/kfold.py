@@ -11,7 +11,6 @@ from utils.utils import compute_accuracy
 from typing import List, Tuple, Union
 from torch.nn.modules.loss import _Loss, _WeightedLoss
 
-import config
 import logging
 import wrapt
 
@@ -22,7 +21,7 @@ class KFoldCrossValidationWrapper:
     @staticmethod
     def setup_kFold_validation(
         dataset : GraphDataset, kf_split: int, batch_size: int, logger: logging.Logger,
-        oh_labels: bool=False, dl_type: FewShotDataLoader | GraphDataLoader=FewShotDataLoader
+        oh_labels: bool=False, dl_type: FewShotDataLoader | GraphDataLoader=FewShotDataLoader, **kwargs
     ) -> List[Tuple[int, FewShotDataLoader, Data]]:
         """
         Setup the kfold validation, i.e., returns a list of 
@@ -47,8 +46,8 @@ class KFoldCrossValidationWrapper:
 
             # Get dataloaders
             train_dl = get_dataloader(
-                train_ds, n_way=config.TRAIN_WAY, k_shot=config.TRAIN_SHOT,
-                n_query=config.TRAIN_QUERY, epoch_size=config.TRAIN_EPISODE,
+                train_ds, n_way=kwargs["train_way"], k_shot=kwargs["train_shot"],
+                n_query=kwargs["train_query"], epoch_size=kwargs["train_episode"],
                 shuffle=True, batch_size=batch_size, oh_labels=oh_labels, dl_type=dl_type
             )
 
@@ -62,17 +61,17 @@ class KFoldCrossValidationWrapper:
     def kFold_validation(
         trainer: 'utils.trainers.Trainer', logger: logging.Logger, 
         loss: Union[_Loss, _WeightedLoss], use: bool=True,
-        oh_labels: bool=False, dl_type: FewShotDataLoader | GraphDataLoader=FewShotDataLoader
+        oh_labels: bool=False, dl_type: FewShotDataLoader | GraphDataLoader=FewShotDataLoader, **kwargs
     ) -> None:
 
         @wrapt.decorator
         def wrapper(fun, *args, **kwargs) -> None:
             if use:
-                print("Starting kFold-Cross Validation with: K = ", config.N_FOLD)
+                print("Starting kFold-Cross Validation with: K = ", kwargs["n_fold"])
 
                 # Setup the KFold Cross Validation
                 dataloaders = KFoldCrossValidationWrapper.setup_kFold_validation(
-                    dataset=trainer.train_ds, kf_split=config.N_FOLD, 
+                    dataset=trainer.train_ds, kf_split=kwargs["n_fold"], 
                     batch_size=trainer.batch_size, logger=logger,
                     oh_labels=oh_labels, dl_type=dl_type
                 )
@@ -96,9 +95,9 @@ class KFoldCrossValidationWrapper:
                         
                         for val_data, _ in val_dl:
                             # To GPU if necessary
-                            if config.DEVICE != "cpu":
+                            if kwargs["device"] != "cpu":
                                 val_data = val_data.pin_memory()
-                                val_data = val_data.to(config.DEVICE)
+                                val_data = val_data.to(kwargs["device"])
                             
                             # Takes the output of the model, compute the loss and the accuracy
                             logits, _, _ = net(val_data.x, val_data.edge_idex, val_data.batch)
