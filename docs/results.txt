@@ -1,5 +1,0 @@
-TRIANGLES test phase result AS-MAML 500 epoch:
-    TEST FINISHED --- Results
-        Testing Accuracy: 79.39 ±0.75
-        Query Losses Avg: 0.565449
-        Min Query Loss: 0.310523
