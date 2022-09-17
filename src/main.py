@@ -6,7 +6,7 @@ sys.path.append(os.getcwd())
 from data.dataset import get_dataset
 from utils.utils import configure_logger
 from utils.trainer import Trainer
-from algorithms.asmaml.asmaml import AdaptiveStepMAML
+from algorithms.asmaml.asmaml1 import AdaptiveStepMAML
 
 import argparse
 import config
@@ -24,9 +24,9 @@ def main() -> None:
     parser.add_argument('-s', '--save-path', help="The path where to save pre-trained models", type=str,  default=config.MODELS_SAVE_PATH)
     parser.add_argument('-m', '--model',     help="The name of the model (sage or gcn)",       type=str,  default=config.MODEL_NAME)
     parser.add_argument('--not-as-maml',     help="Use AS-MAML or not",                                   default=True, action="store_false")
-    parser.add_argument('--g-mixup',         help="Use G-Mixup or not",                                   default=False, action="store_true")
+    parser.add_argument('--gmixup',          help="Use G-Mixup or not",                                   default=False, action="store_true")
     parser.add_argument('--flag',            help="Use FLAG or not",                                      default=False, action="store_true")
-    parser.add_argument('--m-evolve',        help="Use M-Evolve or not",                                  default=False, action="store_true")
+    parser.add_argument('--mevolve',         help="Use M-Evolve or not",                                  default=False, action="store_true")
 
     # Configurations for the AS-MAML Model
     parser.add_argument('--batch-size',    help="Dimension of a batch",                            type=int,   default=1)
@@ -36,7 +36,7 @@ def main() -> None:
     parser.add_argument('--w-decay',       help="The Weight Decay for optimizer",                  type=float, default=config.WEIGHT_DECAY)
     parser.add_argument('--max-step',      help="The Max Step of the meta model",                  type=int,   default=config.MAX_STEP)
     parser.add_argument('--min-step',      help="The Min Step of the meta model",                  type=int,   default=config.MIN_STEP)
-    parser.add_argument('--penality',      help="Step Penality for the RL model",                  type=float, default=config.STEP_PENALITY)
+    parser.add_argument('--penalty',       help="Step Penality for the RL model",                  type=float, default=config.STEP_PENALITY)
     parser.add_argument('--train-shot',    help="The number of Shot per Training",                 type=int,   default=config.TRAIN_SHOT)
     parser.add_argument('--val-shot',      help="The number of shot per Validation",               type=int,   default=config.VAL_SHOT)
     parser.add_argument('--train-query',   help="The number of query per Training",                type=int,   default=config.TRAIN_QUERY)
@@ -68,7 +68,7 @@ def main() -> None:
 
     args = parser.parse_args()
     assert args.model in ["sage", "gcn"], f"Model name: {args.model} has not been implemented yet"
-    assert sum([args.use_mevolve, args.use_flag, args.use_gmixup]) < 2, "Cannot use more than one GDA technique at the same time"
+    assert sum([args.mevolve, args.flag, args.gmixup]) < 2, "Cannot use more than one GDA technique at the same time"
 
     configs = {
         "data_path"     : args.path,
@@ -79,12 +79,12 @@ def main() -> None:
         "save_path"     : args.save_path,
         "model_name"    : args.model,
         "use_asmaml"    : args.not_as_maml,
-        "use_gmixup"    : args.g_mixup,
+        "use_gmixup"    : args.gmixup,
         "use_flag"      : args.flag,
-        "use_mevolve"   : args.m_evolve,
+        "use_mevolve"   : args.mevolve,
         "batch_size"    : args.batch_size,
         "outer_lr"      : args.outer_lr,
-        "innter_lr"     : args.inner_lr,
+        "inner_lr"      : args.inner_lr,
         "stop_lr"       : args.stop_lr,
         "weight_decay"  : args.w_decay,
         "max_step"      : args.max_step,
@@ -103,7 +103,7 @@ def main() -> None:
         "patience"      : args.patience,
         "grad_clip"     : args.grad_clip,
         "scis"          : args.scis,
-        "schs"          : args.schc,
+        "schs"          : args.schs,
         "beta"          : args.beta,
         "n_fold"        : args.n_fold,
         "n_xval"        : args.n_xval,

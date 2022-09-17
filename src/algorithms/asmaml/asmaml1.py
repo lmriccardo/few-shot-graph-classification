@@ -15,7 +15,7 @@ import math
 
 class AdaptiveStepMAML(nn.Module):
     """ The Meta-Learner Class """
-    def __init__(self, model: torch.Module, paper: bool=False, **kwargs) -> None:
+    def __init__(self, model: nn.Module, kwargs, paper: bool=False) -> None:
         super(AdaptiveStepMAML, self).__init__()
         
         self.net                = model
@@ -29,7 +29,7 @@ class AdaptiveStepMAML(nn.Module):
         self.grad_clip          = kwargs["grad_clip"]
         self.flexible_step      = kwargs["flexible_step"]
         self.step_test          = kwargs["step_test"]
-        self.step_penality      = kwargs["step_penality"]
+        self.step_penality      = kwargs["step_penalty"]
         self.batch_per_episodes = kwargs["batch_per_episodes"]
 
         self.task_index = 1
@@ -162,7 +162,7 @@ class AdaptiveStepMAML(nn.Module):
             query_label_ = query_label[0] if self.paper else query_data.y
 
             logits_q, _ ,_= self.net(query_nodes_, query_edge_index_, query_graph_indicator_)
-            loss_q = self.com_loss(logits_q,query_label_)
+            loss_q = self.compute_loss(logits_q,query_label_)
             losses_q.append(loss_q)
 
             with torch.no_grad():
@@ -264,7 +264,7 @@ class AdaptiveStepMAML(nn.Module):
                 pred_q = F.softmax(logits_q, dim=1).argmax(dim=1)
                 correct = torch.eq(pred_q, query_label_).sum().item()  # convert to numpy
                 corrects.append(correct)
-                loss_query=self.com_loss(logits_q,query_label_)
+                loss_query = self.compute_loss(logits_q, query_label_)
                 query_loss.append(loss_query.item())
 
         accs = 100 * np.array(corrects) / query_size

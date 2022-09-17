@@ -144,14 +144,16 @@ class Trainer:
             "min_step"           : self.min_step,
             "max_step"           : self.max_step,
             "step_test"          : config.STEP_TEST,
-            "step_penalty"       : self.penality,
+            "step_penalty"       : self.penalty,
             "use_score"          : config.USE_SCORE,
             "use_loss"           : config.USE_LOSS,
             "outer_lr"           : self.outer_lr,
             "stop_lr"            : self.stop_lr,
             "patience"           : self.patience,
             "paper"              : self.paper,
-            "weight_decay"       : self.weight_decay
+            "weight_decay"       : self.weight_decay,
+            "scis"               : self.scis,
+            "schs"               : self.schs
         }
 
         meta = self.meta_model_cls(self.model, mm_configuration).to(self.device)
@@ -430,7 +432,7 @@ class Trainer:
                 torch.save({'epoch': epoch, 'embedding': self.model2save.state_dict()
                     }, os.path.join(
                         self.save_path, 
-                        f'{self.dataset_name}_{self.save_suffix}BestModel.pth'
+                        f'{self.data_name}_{self.save_suffix}BestModel.pth'
                     )
                 )
             else :
