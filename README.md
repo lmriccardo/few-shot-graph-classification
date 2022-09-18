@@ -35,3 +35,19 @@ Each of the dataset has been splitted into *train*, *test* and *validation*, and
 - `<dataname>_val_set.pickle` with all the validation data as python dictionaries
 
 These are the link from which you can download the datasets: [TRIANGLES](https://drive.google.com/drive/folders/1Ghdi2dwoqMsqrAwxz4bYZrZI7Y8-B6In?usp=sharing), [COIL-DEL](https://drive.google.com/drive/folders/1m3frg5_MPOPPEoTJO7aSGDKMh-nqOOHL?usp=sharing), [R52](https://drive.google.com/drive/folders/158WZsLUMBBUJRR_RdbHY3I3Ea2yPU8lW?usp=sharing) and [Letter-High](https://drive.google.com/drive/folders/1573PBEW0R8xyZnkpcEBMht2l4p2jbbkm?usp=sharing).
+
+---
+
+## 3. Project structure
+
+In this section I'm going to describe the structure of this project.
+
+```bash
+.
+├── data			# Contains the datasets (TRIANGLES, COIL-DEL, R52 and Letter-High)
+├── models		# Contains pre-trained models for each of the different tests done
+├── src			# Source files of the project
+├── fsgc.ipynb 	# The notebook of the project (ready-to-go)
+├── LICENSE
+└── README.md
+```
