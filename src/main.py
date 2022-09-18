@@ -4,7 +4,7 @@ import os
 sys.path.append(os.getcwd())
 
 from data.dataset import get_dataset
-from utils.utils import configure_logger
+from utils.utils import configure_logger, setup_seed
 from utils.trainer import Trainer
 from algorithms.asmaml.asmaml import AdaptiveStepMAML
 
@@ -173,6 +173,9 @@ def main() -> None:
     )
 
     print(configurations, file=sys.stdout if not configs["file_log"] else open(logger.handlers[1].baseFilename, mode="a"))
+
+    # Set the seed
+    setup_seed(4012)
 
     # Run the trainer
     meta_model = AdaptiveStepMAML if configs["use_asmaml"] else None

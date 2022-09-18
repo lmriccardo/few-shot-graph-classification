@@ -407,7 +407,6 @@ class Trainer:
         self.logger.debug("Starting Optimization")
 
         for epoch in range(self.epochs):
-            setup_seed(epoch)
             print("=" * 103)
             print("=" * 103, file=sys.stdout if not self.file_log else open(
                     self.logger.handlers[1].baseFilename, mode="a"
