@@ -47,23 +47,47 @@ In this section I'm going to describe the structure of this project.
 ├── data                       # Contains the datasets (TRIANGLES, COIL-DEL, R52 and Letter-High)
 ├── models                     # Contains pre-trained models for each of the different tests done
 ├── src                        # Source files of the project
-|   ├── algorithms             # Contains all the algorithm used in the project
-|   |   ├── asmaml             # Code for AS-MAML
-|   |   |   ├── __init__.py
-|   |   |   ├── README.md
-|   |   |   └── asmaml.py
-|   |   ├── mevolve            # Code for M-Evolve
-|   |   |   ├── __init__.py
-|   |   |   ├── README.md
-|   |   |   └── mevolve.py
-|   |   ├── flag               # Code for FLAG
-|   |   |   ├── __init__.py
-|   |   |   ├── README.md
-|   |   |   └── flag.py
-|   |   ├── gmixup             # Code for M-Evolve
-|   |   |   ├── __init__.py
-|   |   |   ├── README.md
-|   |   |   └── gmixup.py
+│   ├── algorithms             # Contains all the algorithm used in the project
+│   │   ├── asmaml
+│   │   │   ├── __init__.py
+│   │   │   ├── README.md
+│   │   │   └── asmaml.py
+│   │   ├── mevolve
+│   │   │   ├── __init__.py
+│   │   │   ├── README.md
+│   │   │   └── mevolve.py
+│   │   ├── flag
+│   │   │   ├── __init__.py
+│   │   │   ├── README.md
+│   │   │   └── flag.py
+│   │   ├── gmixup
+│   │   │   ├── __init__.py
+│   │   │   ├── README.md
+│   │   │   └── gmixup.py
+│   ├── data
+│   │   ├── __init__.py
+│   │   ├── dataset.py
+│   │   ├── sampler.py
+│   │   └── dataloader.py
+│   ├── models
+│   │   ├── __init__.py
+│   │   ├── conv.py
+│   │   ├── gcn4maml.py
+│   │   ├── linear.py
+│   │   ├── nis.py
+│   │   ├── pool.py
+│   │   ├── sage4maml.py
+│   │   ├── stopcontrol.py
+│   │   └── utils.py
+│   ├── utils
+│   │   ├── __init__.py
+│   │   ├── kfold.py
+│   │   ├── testers.py
+│   │   ├── trainer.py
+│   │   └── utils.py
+│   ├── __init__.py
+│   ├── config.py
+│   └── main.py
 ├── fsgc.ipynb                 # The notebook of the project (ready-to-go)
 ├── LICENSE
 └── README.md
