@@ -36,6 +36,8 @@ Each of the dataset has been splitted into *train*, *test* and *validation*, and
 
 These are the link from which you can download the datasets: [TRIANGLES](https://drive.google.com/drive/folders/1Ghdi2dwoqMsqrAwxz4bYZrZI7Y8-B6In?usp=sharing), [COIL-DEL](https://drive.google.com/drive/folders/1m3frg5_MPOPPEoTJO7aSGDKMh-nqOOHL?usp=sharing), [R52](https://drive.google.com/drive/folders/158WZsLUMBBUJRR_RdbHY3I3Ea2yPU8lW?usp=sharing) and [Letter-High](https://drive.google.com/drive/folders/1573PBEW0R8xyZnkpcEBMht2l4p2jbbkm?usp=sharing).
 
+However, you can give whathever dataset you want. The only requirement is that it is in a specific form, i.e. the one previously descripted: a folder containing four files name as `<dataname>_node_attributes.txt`, `<dataname>_graph_labels.txt`, `<dataname>_graph_edges.txt` and `<dataname>_graph_indicator.txt`. It is preferred to have the pickle files, since their content changes and we already have pre-defined train, validation and test set. In the other case, in which you provide non-pickle files, you will have to transform those files using some utility functions stored in the `utils.py` file (more in the following section). 
+
 ---
 
 ## 3. Project structure
@@ -111,3 +113,73 @@ Finally, to run the base project, i.e. entire training and testing with only AS-
 ```bash
 $> python main.py
 ``` 
+
+For further options for better configuring the execution of the project use the `-h, --help` flag. It will gives the following output, where you can see which options can be modified and for what. 
+
+```bash
+usage: main.py [-h] [-p PATH] [-n NAME] [-d DEVICE] [-l LOG_PATH] [-f] [-s SAVE_PATH] [-m MODEL] [--not-as-maml] [--gmixup] [--flag] [--mevolve]
+               [--batch-size BATCH_SIZE] [--outer_lr OUTER_LR] [--inner_lr INNER_LR] [--stop_lr STOP_LR] [--w-decay W_DECAY] [--max-step MAX_STEP]
+               [--min-step MIN_STEP] [--penalty PENALTY] [--train-shot TRAIN_SHOT] [--val-shot VAL_SHOT] [--train-query TRAIN_QUERY]
+               [--val-query VAL_QUERY] [--train-way TRAIN_WAY] [--test-way TEST_WAY] [--val-episode VAL_EPISODE] [--train-episode TRAIN_EPISODE]
+               [--batch-episode BATCH_EPISODE] [--epochs EPOCHS] [--patience PATIENCE] [--grad-clip GRAD_CLIP] [--scis SCIS] [--schs SCHS] [--beta BETA]
+               [--n-fold N_FOLD] [--n-xval N_XVAL] [--iters ITERS] [--heuristic HEURISTIC] [--lrts LRTS] [--lrtb LRTB] [--flag-m FLAG_M] [--ass ASS]
+
+options:
+  -h, --help            show this help message and exit
+  -p PATH, --path PATH  The path of the dataset (default: /home/fscg/app/data)
+  -n NAME, --name NAME  The name of the dataset (default: COIL-DEL)
+  -d DEVICE, --device DEVICE
+                        The device to use (default: cpu)
+  -l LOG_PATH, --log-path LOG_PATH
+                        The path where to log (default: None)
+  -f, --file-log        If logging to file or not (default: False)
+  -s SAVE_PATH, --save-path SAVE_PATH
+                        The path where to save pre-trained models (default: /home/fscg/app/models)
+  -m MODEL, --model MODEL
+                        The name of the model (sage or gcn) (default: sage)
+  --not-as-maml         Use AS-MAML or not (default: True)
+  --gmixup              Use G-Mixup or not (default: False)
+  --flag                Use FLAG or not (default: False)
+  --mevolve             Use M-Evolve or not (default: False)
+  --batch-size BATCH_SIZE
+                        Dimension of a batch (default: 1)
+  --outer_lr OUTER_LR   Initial LR for the model (default: 0.001)
+  --inner_lr INNER_LR   Initial LR for the meta model (default: 0.01)
+  --stop_lr STOP_LR     Initial LR for the Stop model (default: 0.0001)
+  --w-decay W_DECAY     The Weight Decay for optimizer (default: 1e-05)
+  --max-step MAX_STEP   The Max Step of the meta model (default: 15)
+  --min-step MIN_STEP   The Min Step of the meta model (default: 5)
+  --penalty PENALTY     Step Penality for the RL model (default: 0.001)
+  --train-shot TRAIN_SHOT
+                        The number of Shot per Training (default: 10)
+  --val-shot VAL_SHOT   The number of shot per Validation (default: 10)
+  --train-query TRAIN_QUERY
+                        The number of query per Training (default: 15)
+  --val-query VAL_QUERY
+                        The number of query per Validation (default: 15)
+  --train-way TRAIN_WAY
+                        The number of way for Training (default: 3)
+  --test-way TEST_WAY   The number of way for Test and Val (default: 3)
+  --val-episode VAL_EPISODE
+                        The number of episode for Val (default: 200)
+  --train-episode TRAIN_EPISODE
+                        The number of episode for Training (default: 200)
+  --batch-episode BATCH_EPISODE
+                        The number of batch per episode (default: 5)
+  --epochs EPOCHS       The total number of epochs (default: 500)
+  --patience PATIENCE   The patience (default: 35)
+  --grad-clip GRAD_CLIP
+                        The clipping for the gradient (default: 5)
+  --scis SCIS           The input dimension for the Stop Control model (default: 2)
+  --schs SCHS           The hidden dimension for the Stop Control model (default: 20)
+  --beta BETA           The beta used in heuristics of M-Evolve (default: 0.15)
+  --n-fold N_FOLD       The number of Fold for the nX-fol-validation (default: 5)
+  --n-xval N_XVAL       Number of Cross-fold Validation to run (default: 10)
+  --iters ITERS         Number of iterations of M-Evolve (default: 5)
+  --heuristic HEURISTIC
+                        The Heuristic to use (default: random_mapping)
+  --lrts LRTS           The label reliability step thresholds (default: 1000)
+  --lrtb LRTB           The beta used for approximation of the tanh (default: 30)
+  --flag-m FLAG_M       The number of iterations of FLAG (default: 3)
+  --ass ASS             The attack step size (default: 0.008)
+```
