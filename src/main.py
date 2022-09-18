@@ -6,7 +6,7 @@ sys.path.append(os.getcwd())
 from data.dataset import get_dataset
 from utils.utils import configure_logger
 from utils.trainer import Trainer
-from algorithms.asmaml.asmaml1 import AdaptiveStepMAML
+from algorithms.asmaml.asmaml import AdaptiveStepMAML
 
 import argparse
 import config
