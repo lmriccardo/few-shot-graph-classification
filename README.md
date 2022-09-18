@@ -48,28 +48,28 @@ In this section I'm going to describe the structure of this project.
 ├── models                     # Contains pre-trained models for each of the different tests done
 ├── src                        # Source files of the project
 │   ├── algorithms             # Contains all the algorithm used in the project
-│   │   ├── asmaml
+│   │   ├── asmaml             # Contains code for the AS-MAML
+│   │   │   ├── __init__.py    
+│   │   │   ├── README.md       
+│   │   │   └── asmaml.py      
+│   │   ├── mevolve            # Contains code for M-Evolve
 │   │   │   ├── __init__.py
 │   │   │   ├── README.md
-│   │   │   └── asmaml.py
-│   │   ├── mevolve
-│   │   │   ├── __init__.py
-│   │   │   ├── README.md
-│   │   │   └── mevolve.py
-│   │   ├── flag
+│   │   │   └── mevolve.py     
+│   │   ├── flag               # Contains code for FLAG
 │   │   │   ├── __init__.py
 │   │   │   ├── README.md
 │   │   │   └── flag.py
-│   │   ├── gmixup
+│   │   ├── gmixup             # Contains code for G-Mixup
 │   │   │   ├── __init__.py
 │   │   │   ├── README.md
 │   │   │   └── gmixup.py
-│   ├── data
+│   ├── data                   # Contains code for dataset, dataloader and sampler
 │   │   ├── __init__.py
 │   │   ├── dataset.py
 │   │   ├── sampler.py
 │   │   └── dataloader.py
-│   ├── models
+│   ├── models                 # Contains various convolutional layer and models
 │   │   ├── __init__.py
 │   │   ├── conv.py
 │   │   ├── gcn4maml.py
@@ -92,3 +92,22 @@ In this section I'm going to describe the structure of this project.
 ├── LICENSE
 └── README.md
 ```
+
+---
+
+## 4. Usage
+
+To run the project you will need to install all the dependencies, so the suggested procedure is to create a virtual environment first, with the command `python -m venv <venv_name>`, and then install the required libraries:
+
+- `torch==1.12.1` or `torch==1.12.1+cu116` (or other versions of CUDA) (more [info](https://pytorch.org/get-started/locally/))
+- `torch-geometric` (more [info](https://pytorch-geometric.readthedocs.io/en/latest/notes/installation.html))
+- `numpy` (latest)
+- `matplotlib` (latest)
+- `networkx` (latest)
+- `sklearn` (latest)
+
+Finally, to run the base project, i.e. entire training and testing with only AS-MAML, just provide to the command-line/terminal the following command
+
+```bash
+$> python main.py
+``` 
