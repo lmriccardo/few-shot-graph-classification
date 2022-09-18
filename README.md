@@ -44,10 +44,27 @@ In this section I'm going to describe the structure of this project.
 
 ```bash
 .
-├── data          # Contains the datasets (TRIANGLES, COIL-DEL, R52 and Letter-High)
-├── models        # Contains pre-trained models for each of the different tests done
-├── src           # Source files of the project
-├── fsgc.ipynb    # The notebook of the project (ready-to-go)
+├── data                       # Contains the datasets (TRIANGLES, COIL-DEL, R52 and Letter-High)
+├── models                     # Contains pre-trained models for each of the different tests done
+├── src                        # Source files of the project
+|   ├── algorithms             # Contains all the algorithm used in the project
+|   |   ├── asmaml             # Code for AS-MAML
+|   |   |   ├── __init__.py
+|   |   |   ├── README.md
+|   |   |   └── asmaml.py
+|   |   ├── mevolve            # Code for M-Evolve
+|   |   |   ├── __init__.py
+|   |   |   ├── README.md
+|   |   |   └── mevolve.py
+|   |   ├── flag               # Code for FLAG
+|   |   |   ├── __init__.py
+|   |   |   ├── README.md
+|   |   |   └── flag.py
+|   |   ├── gmixup             # Code for M-Evolve
+|   |   |   ├── __init__.py
+|   |   |   ├── README.md
+|   |   |   └── gmixup.py
+├── fsgc.ipynb                 # The notebook of the project (ready-to-go)
 ├── LICENSE
 └── README.md
 ```
