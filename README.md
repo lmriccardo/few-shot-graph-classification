@@ -44,10 +44,10 @@ In this section I'm going to describe the structure of this project.
 
 ```bash
 .
-├── data			# Contains the datasets (TRIANGLES, COIL-DEL, R52 and Letter-High)
-├── models		# Contains pre-trained models for each of the different tests done
-├── src			# Source files of the project
-├── fsgc.ipynb 	# The notebook of the project (ready-to-go)
+├── data          # Contains the datasets (TRIANGLES, COIL-DEL, R52 and Letter-High)
+├── models        # Contains pre-trained models for each of the different tests done
+├── src           # Source files of the project
+├── fsgc.ipynb    # The notebook of the project (ready-to-go)
 ├── LICENSE
 └── README.md
 ```
