@@ -15,3 +15,23 @@ Most of the graph classification task overlook the scarcity of labeled graph in 
 **Meta-Learning**
 
 Humans learn really quickly from few examples, but what can we say about computers? In particular we can easily classify different objects of the real-world just after having seen very few examples, however current deep learning methods needs a huge amount of information in order to create a very precise model. Moreover, what if the test set has classes that we do not have in the training set? Or what if we want to test the model on a completely different task? Meta-Learning offers solutions to these situations. Why? It is also known as *learn-to-learn*: the goal is, obviously to learn a model that correctly classify already seen samples, but also to learn a model that quickly adapt to new classes and/or tasks with few samples. One of the most famous meta-learner is the so-called [MAML](https://arxiv.org/pdf/1703.03400.pdf).
+
+---
+
+## 2. Used Datasets
+
+I decided to use the same datasets considered in the paper for AS-MAML: TRIANGLES, COIL-DEL, R52 and Letter-High. All of them can be downloaded directly from this [page](https://ls11-www.cs.tu-dortmund.de/staff/morris/graphkerneldatasets), which is the origin of these datasets. Downloading from the previous page will result in a ZIP file with: 
+
+- `<dataname>_node_attributes.txt` with the attribute vector for each node of each graph
+- `<dataname>_graph_labels.txt` with the class for each graph
+- `<dataname>_graph_edges.txt` with the edges for each graph expressed as a pair (node x, node y)
+- `<dataname>_graph_indicator.txt` that maps each nodes to its corresponding graph
+
+Each of the dataset has been splitted into *train*, *test* and *validation*, and transformed into a python dictionaries finally saved as `.pickle` files. In this way we have a ready-to-be-used dataset. Moreover, each ZIP dataset containes three files:
+
+- `<dataname>_node_attributes.pickle` with the node attributes saved as a List or a torch Tensor
+- `<dataname>_train_set.pickle` with all the train data as python dictionaries
+- `<dataname>_test_set.pickle` with all the test data as python dictionaries
+- `<dataname>_val_set.pickle` with all the validation data as python dictionaries
+
+These are the link from which you can download the datasets: [TRIANGLES](https://drive.google.com/drive/folders/1Ghdi2dwoqMsqrAwxz4bYZrZI7Y8-B6In?usp=sharing), [COIL-DEL](https://drive.google.com/drive/folders/1m3frg5_MPOPPEoTJO7aSGDKMh-nqOOHL?usp=sharing), [R52](https://drive.google.com/drive/folders/158WZsLUMBBUJRR_RdbHY3I3Ea2yPU8lW?usp=sharing) and [Letter-High](https://drive.google.com/drive/folders/1573PBEW0R8xyZnkpcEBMht2l4p2jbbkm?usp=sharing).
