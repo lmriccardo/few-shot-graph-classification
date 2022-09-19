@@ -30,4 +30,4 @@ This heuristic is based on so-called *motifs*: sub-graphs that repeat themselves
 Finally, for what concerning adding edges, we construct $E_\text{add}$ by weight random sampling from $E^c_\text{add}$. The question now is, *How do I sample?* To this end, weights are given by a vertex similarity score using *Resource Allocation Index*: for each $(v_i, v_j)$ the RAI $s_\text{i,j}$ and the respective weight $w_\text{i,j}$ can be computed as
 
 
-$$s_\text{i,j} = \sum_\{z \in \Gamma(i) \cap \Gamma(j)\}\frac{1}{\text{deg}(z)}\;\;\;\;ciao$$
+$$s_\text{i,j} = \sum_\{z \in \Gamma(i) \cap \Gamma(j)\}\frac{1}{\text{deg}(z)}, S = \lbrace s_\text{i,j} | \forall (v_i,v_j) \in E^c_\text{add} \rbrace$$
