@@ -97,7 +97,7 @@ In this section I'm going to describe the structure of this project.
 
 ---
 
-## 4. Usage
+## 4. Installation and usage
 
 To run the project you will need to install all the dependencies, so the suggested procedure is to create a virtual environment first, with the command `python -m venv <venv_name>`, and then install the required libraries:
 
@@ -199,3 +199,5 @@ As I said the goal of this projects is to compare different Graph Data Augmentat
 - **G-Mixup**. GDA technique that uses Mixup on graphs via graphons ([paper](https://arxiv.org/pdf/2202.07179.pdf))
 
 For quick further informations about each of the three techniques I suggest to have a look to their respectively README that you can found at `./src/algorithms/mevolve` (for M-Evolve), `./src/algorithms/flag` (for FLAG) and `./src/algorithms/gmixup` (for G-Mixup). 
+
+Finally, I decided to use as baseline comparision results and performances given by AS-MAML run on both a classic GCN (for MAML) and a SAGE (for MAML) model. 
