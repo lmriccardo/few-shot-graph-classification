@@ -10,4 +10,12 @@ Let $\mathcal{G} = (V, E)$ be a generic graph, where $V$ is the set of nodes and
 
 ## Methodology
 
+In this section I'm going to describe which are the methodologies for generating new graph data and for filtering them. The filter operations is very important since provide us a reliability score for each of the newly "constructed" data. 
+
+### Data Generation methods
+
 M-Evolve is based on two heuristics: *random similarity mapping* and *motifs similarity mapping*. Although the former is just a baseline comparision, and for this reason we are going to focus much more on the second, I would like to give you a quick overview of the first one. From now on we are going to call $E^c_\text{del}$ and $E^c_\text{add}$ the set of nodes from which egdes are sampled to be respectively deleted/added. 
+
+**Random mapping**
+
+In this case we set $E^c_\text{del} = E$ and $E^c_\text{add} = {c}$
