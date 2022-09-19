@@ -114,7 +114,7 @@ Finally, to run the base project, i.e. entire training and testing with only AS-
 $> python main.py
 ``` 
 
-For further options for better configuring the execution of the project use the `-h, --help` flag. It will gives the following output, where you can see which options can be modified and for what. 
+For further options to better configuring the execution of the project, please use the `-h, --help` flag. It will gives you the following output, where you can see which options can be modified and for what. 
 
 ```bash
 usage: main.py [-h] [-p PATH] [-n NAME] [-d DEVICE] [-l LOG_PATH] [-f] [-s SAVE_PATH] [-m MODEL] [--not-as-maml] [--gmixup] [--flag] [--mevolve]
@@ -186,4 +186,16 @@ options:
 
 ### 4.1. Docker
 
-Alternatively, I have already created a [Docker Image](https://hub.docker.com/repository/docker/lmriccardo/fsgc) that can be pulled with `docker pull lmriccardo/fsgc:1.0a`. Then, you need to run the container with `docker run --rm -it lmriccardo/fsgc:1.0a` and, finally, run the same python command given above `python main.py`. 
+Alternatively, I have already created a [Docker Image](https://hub.docker.com/repository/docker/lmriccardo/fsgc) that can be pulled with `docker pull lmriccardo/fsgc:1.0a`. Then, you need to run the container with `docker run --rm -it lmriccardo/fsgc:1.0a` and, finally, run the same python command given above: `python main.py`. 
+
+---
+
+## 5. Algorithms and Models
+
+As I said the goal of this projects is to compare different Graph Data Augmentation techniques for few-shot learning, and more precisely for few-shot classification. For this reason all the techniques that have been chosen regard augmentation for classification, i.e. techniques that try to preserve structural properties of the original graph. The overall idea is to generate new data for already defined labels, this means without additionally labeling those new data, by using some procedures of dropping edge/nodes, change in node features or randomly generate graphs based on so-called *graphons*. To this end I decided to use this three GDA technique, one per type:
+
+- **Model-Evolution**. GDA technique that uses edge dropping based on motifs similarity ([paper](https://arxiv.org/pdf/2007.05700.pdf))
+- **FLAG**. GDA technique that uses perturbation attacks to perturb node features ([paper](https://arxiv.org/pdf/2010.09891.pdf))
+- **G-Mixup**. GDA technique that uses Mixup on graphs via graphons ([paper](https://arxiv.org/pdf/2202.07179.pdf))
+
+For quick further informations about each of the three techniques I suggest to have a look to their respectively README that you can found at `./src/algorithms/mevolve` (for M-Evolve), `./src/algorithms/flag` (for FLAG) and `./src/algorithms/gmixup` (for G-Mixup). 

@@ -177,6 +177,7 @@ def main() -> None:
     # Set the seed
     setup_seed(4012)
 
+    # TODO: Set to use the pre-trained model
     # Run the trainer
     meta_model = AdaptiveStepMAML if configs["use_asmaml"] else None
     save_suffix = "ASMAML_" if configs["use_asmaml"] else "_"
