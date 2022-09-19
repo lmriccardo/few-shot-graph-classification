@@ -31,3 +31,5 @@ Finally, for what concerning adding edges, we construct $E_\text{add}$ by weight
 
 
 $$s_\text{i,j} = \sum_\{z \in \Gamma(i) \cap \Gamma(j)\}\frac{1}{\text{deg}(z)}, S = \lbrace s_\text{i,j} | \forall (v_i,v_j) \in E^c_\text{add} \rbrace$$
+
+$$w^\text{add}_{i,j} = \frac{s_{i,j}}{\sum_{s \in S} s}$$
