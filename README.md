@@ -198,7 +198,7 @@ As I said the goal of this projects is to compare different Graph Data Augmentat
 - **FLAG**. GDA technique that uses perturbation attacks to perturb node features ([paper](https://arxiv.org/pdf/2010.09891.pdf))
 - **G-Mixup**. GDA technique that uses Mixup on graphs via graphons ([paper](https://arxiv.org/pdf/2202.07179.pdf))
 
-For quick further informations about each of the three techniques I suggest to have a look to their respectively README that you can found at [`./src/algorithms/mevolve`](src/algorithms/mevolve) (for M-Evolve), `./src/algorithms/flag` (for FLAG) and `./src/algorithms/gmixup` (for G-Mixup). 
+For quick further informations about each of the three techniques I suggest to have a look to their respectively README that you can found at [`./src/algorithms/mevolve`](src/algorithms/mevolve) (for M-Evolve), [`./src/algorithms/flag`](src/algorithms/flag) (for FLAG) and [`./src/algorithms/gmixup`](src/algorithms/gmixup) (for G-Mixup). 
 
 Finally, I decided to use as baseline comparision results and performances given by AS-MAML run on both a classic GCN (for MAML) and a SAGE (for MAML) model. 
 
