@@ -4,9 +4,13 @@ This is an overview on the M-Evolve GDA techniques from the [Data Augmentation f
 
 Data limitations makes easy to fall into overfitting. To solve this problem, they take an effective approach to study data augmentation on graphs and develop two graph augmentation methos, called *random mapping* and *motif-similarity mapping*, respectively. The idea is to generate more virtual data for small datasets via heuristic modifications of graph structure. Since this new graph are artificial and treated as weakely labeled data, thier reliability remains to be verified. For this reason, they introduce also a data filtering procedure to filter augmented data based on label reliability. 
 
-## Problem definition
+---
+
+## Problem definition 
 
 Let $\mathcal{G} = (V, E)$ be a generic graph, where $V$ is the set of nodes and $E$ is the set of edges. $\mathcal{G}$ is, in general, represented using the adjacency matrix $\mathbf{A}[n\times n]$ such that $\mathbf{A}[i,j] = 1$ if $(i,j) \in E$ and $\mathbf{A}[i,j] = 0$ otherwise. The overall dataset $\mathcal{D}$ is composed of pairs $(\mathcal{G}_i,\mathbf{y}_i)$ for each $i \in [0, N]$, and it is splitted into train set $\mathcal{D}^\text{train}$, validation set $\mathcal{D}^\text{val}$ and test set $\mathcal{D}^\text{test}$. Finally, we have a classifier $\mathcal{C}$ pre-trained on the train and validation dataset. The goal is to update the classifier $\mathcal{C}$ with augmented data, which are first generated via GDA and then filtered via label reliability. During GDA, we want to map a graph $\mathcal{G} \in \mathcal{D}^\text{train}$ to a new graph $\mathcal{G}'$ with a function $f : (\mathcal{G}, \mathbf{y}) \to (\mathcal{G}', \mathbf{y})$. Then classify the new generated graphs into two groups via label reliability threshold $\theta$, learnt from the validation set. Finally, the new filtered train set $\mathcal{D'}^\text{train}$ is merged with the original train set: $\mathcal{D}^\text{new,train} = \mathcal{D}^\text{train} + \mathcal{D'}^\text{train}$. Then, we finetune the classifier with the new train set and evaluate using the validation set.
+
+---
 
 ## Methodology
 
@@ -18,4 +22,8 @@ M-Evolve is based on two heuristics: *random similarity mapping* and *motifs sim
 
 **Random mapping**
 
-In this case we set $E^c_\text{del} = E$ and $E^c_\text{add} = \lbrace (v_i, v_j) | \mathbf{A}[i,j] = 0, i \neq j \rbrace$. Finally, we sample $E_\text{del} = \lbrace e_i | i = 1, ..., \lceil m \cdot \beta \rceil \rbrace \subset E^c_\text{del}$ and $E_\text{add} = \lbrace e_i | i = 1, ..., \lceil m \cdot \beta \rceil \rbrace \subset E^c_\text{add}$ and construct the new graph $\mathcal{G}' = (V, (E \cup E_\text{add}) \backslash E_\text{del})$
+In this case we set $E^c_\text{del} = E$ and $E^c_\text{add} = \lbrace (v_i, v_j) | \mathbf{A}[i,j] = 0, i \neq j \rbrace$. Finally, we sample $E_\text{del} = \lbrace e_i | i = 1, ..., \lceil m \cdot \beta \rceil \rbrace \subset E^c_\text{del}$ and $E_\text{add} = \lbrace e_i | i = 1, ..., \lceil m \cdot \beta \rceil \rbrace \subset E^c_\text{add}$ and construct the new graph $\mathcal{G}' = (V, (E \cup E_\text{add}) \backslash E_\text{del})$. We can easily find out why this is considered just a baseline: it is random. Due to its randomness structural properties of the original graphs would not be preserved. 
+
+**Motifs-similarity mapping**
+
+This heuristic is based on so-called *motifs*: sub-graphs that repeat themselves in a specific graph or even among various graphs. Each of these sub-graphs, defined by a particular pattern of interactions between vertices, may describe a framework in which particular functions are achieved efficiently. In this case we are considering so-called *open-triad* $\bigwedge_\text{i,j}^a$ that are equivalent to lenght-2 paths emanating from the head vertex $v_i$ that induce a triangle. Essentially, open-triad are triples of nodes connected together by just two edges, such that if the third edge is inserted then we would build a triangle. Using this motifs we can preserves structural properties. Now, we need to recall that if $\mathbf{A}$ is the adjacency matrix, then $\mathbf{A}^2$ is a matrix such that $\mathbf{A}[i,i] = \text{deg}(v_i)$ while $\mathbf{A}[i,j] = |\lbrace \pi = v_i,v_z,v_j | v_z \in V, (v_i, v_z) \in E, (v_z, v_j) \in E \rbrace|$
