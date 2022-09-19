@@ -18,4 +18,4 @@ M-Evolve is based on two heuristics: *random similarity mapping* and *motifs sim
 
 **Random mapping**
 
-In this case we set $E^c_\text{del} = E$ and $E^c_\text{add} = \lbrace (v_i, v_j) | \mathbf{A}[i,j] = 0, i \neq j \rbrace$
+In this case we set $E^c_\text{del} = E$ and $E^c_\text{add} = \lbrace (v_i, v_j) | \mathbf{A}[i,j] = 0, i \neq j \rbrace$. Finally, we sample $E_\text{del} = \lbrace e_i | i = 1, ..., \ceil{m \cdot \beta} \rbrace$
