@@ -12,6 +12,8 @@ In this work they investigate how to effectively improve the generalization of G
 
 **Min-Max Optimization**
 
-Adversarial training is the process of crafting adversarial data points, and then injecting them into training data. This process is often formulated as the following min-max problem
+Adversarial training is the process of crafting adversarial data points, and then injecting them into training data. This process is often formulated as the following min-max problem \min_\theta \mathbb{E}[\max_{||\mathbf{\delta}|| \leq \epsilon} L( f_\theta (x + \mathbf{\delta}), y)] where the outer minimization uses the SGD, while the inner maximization uses the *Projected GD*. In practice the typical approximation of the inner under $l_\infty$-norm constraint is as follow
 
-$$\min_\theta \mathbb{E}[\max_{||\mathbf{\delta}||_p \leq \epsilon} \mathcal{L}(f_\theta (x + \mathbf{delta}), y)]$$
+$$\delta_\text{t + 1} = \prod_{||\delta|| \leq \epsilon} (\delta_t + \alpha \cdot \text{sgn}(\nabla_\delta L(f_\theta(x + \delta_t), y)))$$
+
+where the perturbation $\delta$ is updated iteratively, and $\prod_{||\delta|| \leq \epsilon}$ performs projection onto the $\epsilon$-ball in the $l_\infty$-norm. For maximum robustness, this iterative updating procedure usually loops $M$ times to craft the worst-case noise, which requires $M$ forward and backward passes end-to-end. Afterwards the most vicious noise $\delta_M$ is applied to the input feature, on which the model weight is optimized. 
