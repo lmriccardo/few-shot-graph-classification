@@ -42,4 +42,4 @@ $$w_\text{i,j}^\text{del} = 1 - \frac{s_\text{i,j}}{\sum_{s \in S} s}, W_\text{d
 
 Since new data are generated randomly, we need the concept of label reliability to measure the matchine degree between examples and labels. Each graph $G_i$ in $\mathcal{D}_\text{val}$ will be fed into the classifier $\mathcal{C}$ to obtain the prediction vector $\mathbf{p}_i \in \mathbb{R}^\text{|Y|}$ . Then, we construct the confusion matrix $\mathbf{Q} \in \mathbb{R}^\text{|Y| x |Y|}$ , where $|Y|$ is the total number of labels, such that $\mathbf{q}[i,j]$ is the average probability the classifier $\mathcal{C}$ classify the sample $G_i$ with $y_j$. So, we compute 
 
-$$\mathbf{q}_k = \frac{1}{\Omega_k} \sum_{y_i = k} \mathbf{p}_i$$
+$$q_k = \frac{1}{\Omega_k} \sum_{y_i = k} p_i$$
