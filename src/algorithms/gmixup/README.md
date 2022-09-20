@@ -17,3 +17,12 @@ $$t(H, G) = \frac{\text{hom}(H, G)}{|V(G)|^\text{|V(H)|}}$$
 **Graphons**. They are continuous, bounded and symmetric functions $W : [0,1]^2 \to [0, 1]$ such that given $u_i, u_j \in [0, 1]$ then $W(u_i, u_j)$ is the probability that the edge $(u_i, u_j)$ exists. Thanks to this, graph can be easily extended to a degree distribution function in graphons $d_w (x) = \int_0^1 W(x, y) \mathrm{d}x$. Similarly the concept of homomorphism density can be easily extended from graph to graphons. Given an arbitary motif $F$ its homomorphism density with respect to the function $W$ is defined as 
 
 $$t(F, W) = \int_{[0,1]^\text{V(F)}} \prod_{(i, j) \in E(F)} W(x_i, x_j) \prod_{i \in V(F)}\mathrm{d}x_i$$
+
+---
+
+## Implementation
+
+1. Graphon estimation: $\mathcal{G} \to W_\mathcal{G}$ and $\mathcal{H} \to W_\mathcal{H}$
+2. Graphon Mixup: $W_\mathcal{I} = \lambda W_\mathcal{G} + (1 - \lambda) W_\mathcal{H}$
+3. Graph Generation: \lbrace I_1, ..., I_m \rbrace \sim \mathbb{G}(K, W_\mathcal{I})
+4. Label Mixup: y_\mathcal{I} = \lambda y_\mathcal{G} + (1 - \lambda) y_\mathcal{H}
