@@ -51,3 +51,5 @@ $$\theta = \arg \min_\theta \sum_{(G_i, y) \in \mathcal{D}_\text{val}} \Phi[(\th
 where $g(G_i, y) = 1$ if and only if $\mathcal{C}(G_i) = y$ and $-1$ otherwise, and $\Phi[x] = 1$ if $x > 0$, 0 otherwise. Now, the question is: *How do we compute* $\theta$? This setting is a simple minimization problem that can be solved finding a closed-form solution. However, the function $\Phi$ is not convex. The idea, is to transform $\Phi[(\theta - r_i)\cdot g(G_i, y)]$ a little bit, of course preserving its semantic meaning. One simple way in which we can re-write the function is the following
 
 $$\Phi[(\theta - r_i)\cdot g(G_i, y)] = \max \lbrace 0, \text{sgn}((\theta - r_i)\cdot g(G_i, y)) \rbrace$$
+
+But we have still the sign function that is not continuous, since it has a discontinuity in 0, moreover it is not convex. To overcome this problem we can use an approximation of that function, that is indeed continuous, i.e. the hyperbolic tangent. In fact, we know that for $\beta \gg 1$ it results $\text{sgn}(x) = \lim_{\beta \to \infty} \tanh(\beta \cdot x)$
