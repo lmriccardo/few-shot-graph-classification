@@ -79,6 +79,57 @@ class FewShotDataLoader(DataLoader):
             yield data1, data2, data3, data4
 
 
+import random
+import torch
+
+
+class NewFewShotDataLoader(object):
+    """A simple few-shot dataloader"""
+    def __init__(self, dataset: GraphDataset | OHGraphDataset, **kwargs) -> None:
+        self.dataset = dataset
+        self.setattr(**kwargs)
+
+        self.targets = self.dataset.get_graphs_per_label()
+        
+    def setattr(self, **attrs) -> None:
+        for k, v in attrs.items():
+            self.__setattr__(k, v)
+
+    def _uncollate(self, batch):
+        idxs = torch.arange(start=0, end=len(batch), step=1).view(self.batch_size, -1)
+        support_batch = []
+        query_batch = []
+        
+        for support_query_idxs in idxs:
+            support_idx, query_idx = support_query_idxs[: (self.n_way * self.k_shot)], support_query_idxs[(self.n_way * self.k_shot):]
+            support_batch.extend([batch[x] for x in support_idx.tolist()])
+            query_batch.extend([batch[x] for x in query_idx.tolist()])
+            
+        return support_batch, query_batch
+
+    def __iter__(self) -> Iterator[Tuple[pyg_data.Data, List[pyg_data.Data], pyg_data.Data, List[pyg_data.Data]]]:
+        target_classes = random.sample(list(self.targets.keys()), k=self.n_way)
+        for _ in range(self.epoch_size):
+
+            n_way_k_shot_query = []
+            for cl in target_classes:
+
+                graphs = self.targets[cl]
+                assert len(graphs) >= self.k_shot + self.n_query, "Not enough graphs for sampling"
+                selected_data = random.sample(graphs, k=self.k_shot + self.n_query)
+                n_way_k_shot_query += selected_data
+            
+            n_way_k_shot_query = torch.tensor(n_way_k_shot_query)
+            perm = torch.randperm(n_way_k_shot_query.shape[0])
+            n_way_k_shot_query = n_way_k_shot_query[perm]
+            
+            batch = [self.dataset[i.item()] for i in n_way_k_shot_query]
+            support_data_batch, query_data_batch = self._uncollate(batch)
+            support_data, support_data_list = _collate(support_data_batch, False)
+            query_data, query_data_list = _collate(query_data_batch, False)
+
+            yield support_data, support_data_list, query_data, query_data_list
+
 
 class GraphDataLoader(DataLoader):
     """Custom simple DataLoader"""
@@ -121,15 +172,20 @@ def get_dataloader(
 ) -> FewShotDataLoader:
     """Return a dataloader instance"""
     if dl_type.__name__ == FewShotDataLoader.__name__:
-        return FewShotDataLoader(
-            dataset=ds,
-            exclude_keys=exclude_keys,
-            batch_sampler=TaskBatchSampler(
-                dataset_targets=ds.get_graphs_per_label(),
-                n_way=n_way, k_shot=k_shot, n_query=n_query,
-                epoch_size=epoch_size, shuffle=shuffle,
-                batch_size=batch_size, oh_labels=oh_labels
-            )
+        # return FewShotDataLoader(
+        #     dataset=ds,
+        #     exclude_keys=exclude_keys,
+        #     batch_sampler=TaskBatchSampler(
+        #         dataset_targets=ds.get_graphs_per_label(),
+        #         n_way=n_way, k_shot=k_shot, n_query=n_query,
+        #         epoch_size=epoch_size, shuffle=shuffle,
+        #         batch_size=batch_size, oh_labels=oh_labels
+        #     )
+        # )
+
+        return NewFewShotDataLoader(
+            dataset=ds, n_way=n_way, k_shot=k_shot, n_query=n_query,
+            epoch_size=epoch_size, batch_size=batch_size
         )
     
     return GraphDataLoader(ds, batch_size=batch_size)

@@ -37,3 +37,7 @@ $$w_\text{i,j}^\text{add} = \frac{s_\text{i,j}}{\sum_{s \in S} s}, W_\text{add} 
 where $\Gamma(i)$ denotes the set of one-hop neighbours of $v_i$. Now, we last with dropping edges. The idea is simple, for each open-triad $\mathcal{O}[i,j] \subset \mathcal{O}$ involving $(v_i, v_j)$, we remove only one edge from it via weighted random sampling. In this case, similarly to adding edges, during edge deletation the probability of an edge sampled from $\mathcal{O}[i,j]$ is proportional to $w_\text{i,j}^\text{del}$, where
 
 $$w_\text{i,j}^\text{del} = 1 - \frac{s_\text{i,j}}{\sum_{s \in S} s}, W_\text{del} = \lbrace w_\text{i,j}^\text{del} | \forall (v_i,v_j) \in \mathcal{O}[i,j] \rbrace$$
+
+### Data filtration
+
+Since new data are generated randomly, we need the concept of label reliability to measure the matchine degree between examples and labels. Each graph $\mathcal{G}_i$ in $\mathcal{D}_\text{val}$ will be fed into the classifier $\mathcal{C}$ to obtain the prediction vector $\mathbf{p}_i \in \mathbb{R}^\text{|Y|}$. 
