@@ -26,3 +26,7 @@ $$t(F, W) = \int_{[0,1]^\text{V(F)}} \prod_{(i, j) \in E(F)} W(x_i, x_j) \prod_{
 2. Graphon Mixup: $W_\mathcal{I} = \lambda W_\mathcal{G} + (1 - \lambda) W_\mathcal{H}$
 3. Graph Generation: $\lbrace I_1, ..., I_m \rbrace \sim \mathbb{G}(K, W_\mathcal{I})$
 4. Label Mixup: $y_\mathcal{I} = \lambda y_\mathcal{G} + (1 - \lambda) y_\mathcal{H}$
+
+**Graphon Estimation**. We use a step function to estimate graphons. In general the step function can be seen as a matrix $\mathbf{W} = [w_\text{kk'}] \in [0, 1]^{k \times k}$ where $\mathbf{W}[i,j]$ is the probability of the edge $(i,j)$ exists. The typical step function estimation methods includes *Sorting-and-Smoothin* (SAS), *Sthocastic Block Approximation* (SBA), *Largest Gap* (LG), *Matric Completition* (MC) and *Universal Singular Value Threshold* (USVD). Formally, a step function $W^p : [0,1]^2 \to [0,1]$ is defined as $W^p(x,y) = \sum_{k,k' = 1}^k w_\text{kk'} 1_{P_k \times P_{k'}}(x,y)$ where $1_{P_k \times P_{k'}}(x,y) = 1$ if $(x,y) \in P_k \times P_{k'}$, 0 otherwise, $\mathcal{P} = (P_1 ... P_k)$ denotes the partition of $[0,1]$ into $K$ adjacent intervals of lenght $1/K$. Finally, the resultant step function $W_\mathcal{I} = \lambda W_\mathcal{G} + (1 - \lambda) W_\mathcal{H}$, which serves as generator for synthetic graphs. 
+
+**Synthetic Graphs Generations** 
