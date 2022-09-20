@@ -44,4 +44,4 @@ Since new data are generated randomly, we need the concept of label reliability 
 
 $$q_k = \frac{1}{\Omega_k} \sum_{y_i = k} p_i, \mathbf{Q} = [q_1 ... q_\text{|Y|}]$$
 
-where $\Omega_k$ is the total number of graphs belonging to class $k$ in $\mathcal{D}_\text{val}$. The reliability of an example $(G_i, y_i)$ (in the augmented set) is computed as $r_i = p^\top_i \cdot q_y_i$. Finally, a sample is added to the training set if and only if $r_i \geq \theta$. 
+where $\Omega_k$ is the total number of graphs belonging to class $k$ in $\mathcal{D}_\text{val}$. The reliability of an example $(G_i, y_i)$ (in the augmented set) is computed as $r_i = p^\top_i \cdot q_{y_i}$. Finally, a sample is added to the training set if and only if $r_i \geq \theta$. 
