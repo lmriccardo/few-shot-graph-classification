@@ -40,8 +40,10 @@ $$w_\text{i,j}^\text{del} = 1 - \frac{s_\text{i,j}}{\sum_{s \in S} s}, W_\text{d
 
 ### Data filtration
 
-Since new data are generated randomly, we need the concept of label reliability to measure the matchine degree between examples and labels. Each graph $G_i$ in $\mathcal{D}_\text{val}$ will be fed into the classifier $\mathcal{C}$ to obtain the prediction vector $\mathbf{p}_i \in \mathbb{R}^\text{|Y|}$ . Then, we construct the confusion matrix $\mathbf{Q} \in \mathbb{R}^\text{|Y| x |Y|}$ , where $|Y|$ is the total number of labels, such that $\mathbf{q}[i,j]$ is the average probability the classifier $\mathcal{C}$ classify the sample $G_i$ with $y_j$. So, we compute 
+Since new data are generated randomly, we need the concept of label reliability to measure the matchine degree between examples and labels. Each graph $G_i$ in $\mathcal{D}_\text{val}$ will be fed into the classifier $\mathcal{C}$ to obtain the prediction vector $\mathbf{p}_i \in \mathbb{R}^\text{|Y|}$ . Then, we construct the confusion matrix $\mathbf{Q} \in \mathbb{R}^\text{|Y| x |Y|}$ , where $|Y|$ is the total number of labels, such that $\mathbf{q}[i,j]$ is the average probability the classifier $\mathcal{C}$ classify the sample $G_i$ with $y_j$. So, we compute
 
 $$q_k = \frac{1}{\Omega_k} \sum_{y_i = k} p_i, \mathbf{Q} = [q_1 ... q_\text{|Y|}]$$
 
-where $\Omega_k$ is the total number of graphs belonging to class $k$ in $\mathcal{D}_\text{val}$. The reliability of an example $(G_i, y_i)$ (in the augmented set) is computed as $r_i = p^\top_i \cdot q_{y_i}$. Finally, a sample is added to the training set if and only if $r_i \geq \theta$. 
+where $\Omega_k$ is the total number of graphs belonging to class $k$ in $\mathcal{D}_\text{val}$. The reliability of an example $(G_i, y)$ (in the augmented set) is computed as $r_i = p^\top_i \cdot q_y$. Finally, a sample is added to the training set if and only if $r_i \geq \theta$. The treshold $\theta$ is the result of an optimization problem, more precisely a minimization problem
+
+$$\theta = \arg \min_\theta \sum_{(G_i, y) \in \mathcal{D}_\text{val}} \Phi[(\theta - r_i)\cdot g(G_i, y)]$$
