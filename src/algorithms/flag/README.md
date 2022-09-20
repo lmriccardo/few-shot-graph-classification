@@ -14,4 +14,4 @@ In this work they investigate how to effectively improve the generalization of G
 
 Adversarial training is the process of crafting adversarial data points, and then injecting them into training data. This process is often formulated as the following min-max problem
 
-$$\min_\theta \mathbb{E}_{(x, y) \sim \mathcal{D}}[\max_{||\mathbf{\delta}||_p \leq \epsilon}]$$
+$$\min_\theta \mathbb{E}[\max_{||\mathbf{\delta}||_p \leq \epsilon} \mathcal{L}(f_\theta (x + \mathbf{delta}), y)]$$
