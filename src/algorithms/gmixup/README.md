@@ -12,6 +12,6 @@ Given two different graph set $\mathcal{G}$ and $\mathcal{H}$ with different lab
 
 **Graph Homomorphism**. Adjacency-preserving mapping between two graphs, i.e., mapping adjacent vertices in one graph to adjacent vertices in another graph. Formally, $\phi : F \to G$ is a map from $V(F)$ to $V(G)$, where if $(u, v) \in E(F)$ then also $(\phi(u), \phi(v)) \in E(G)$. Let, now, denote $\text{hom}(G, H)$ the total number of graph homomorphism between those two graphs, in total we there are $|V(G)|^\text{|V(H)|}$ mapping, but only some of them are homomorphism. Thus, we can define *homomorphism density* as 
 
-$$t(H, G) = \frac{\text{hom}(H, G)}{|V(G)|^\text{|V(H)|}$$
+$$t(H, G) = \frac{\text{hom}(H, G)}{|V(G)|^\text{|V(H)|}}$$
 
 **Graphons**
