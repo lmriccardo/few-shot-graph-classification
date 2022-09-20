@@ -47,3 +47,5 @@ $$q_k = \frac{1}{\Omega_k} \sum_{y_i = k} p_i, \mathbf{Q} = [q_1 ... q_\text{|Y|
 where $\Omega_k$ is the total number of graphs belonging to class $k$ in $\mathcal{D}_\text{val}$. The reliability of an example $(G_i, y)$ (in the augmented set) is computed as $r_i = p^\top_i \cdot q_y$. Finally, a sample is added to the training set if and only if $r_i \geq \theta$. The treshold $\theta$ is the result of an optimization problem, more precisely a minimization problem
 
 $$\theta = \arg \min_\theta \sum_{(G_i, y) \in \mathcal{D}_\text{val}} \Phi[(\theta - r_i)\cdot g(G_i, y)]$$
+
+where $g(G_i, y) = 1$ if and only if $\mathcal{C}(G_i) = y$ and $-1$ otherwise, and $\Phi[x] = 1$ if $x > 0$, 0 otherwise. 
