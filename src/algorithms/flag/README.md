@@ -17,3 +17,11 @@ Adversarial training is the process of crafting adversarial data points, and the
 $$\delta_\text{t + 1} = \prod_{||\delta|| \leq \epsilon} (\delta_t + \alpha \cdot \text{sgn}(\nabla_\delta L(f_\theta(x + \delta_t), y)))$$
 
 where the perturbation $\delta$ is updated iteratively, and $\prod_{||\delta|| \leq \epsilon}$ performs projection onto the $\epsilon$-ball in the $l_\infty$-norm. For maximum robustness, this iterative updating procedure usually loops $M$ times to craft the worst-case noise, which requires $M$ forward and backward passes end-to-end. Afterwards the most vicious noise $\delta_M$ is applied to the input feature, on which the model weight is optimized. 
+
+**Multi-scale augmentation**
+
+To fully exploit the generalizing ability and enhance the diversity and quality of adversarial perturbations, they proposed to craft multi-scale augmentations. To realize this goal, they leverage the so-called *Free training* technique. PGD is a powerful yet inefficient way of solving the min-max optimization. It runs $M$ full forward and backward passes to craft a refined perturbation $\delta_\text{1:M}$, but the model weight $\theta$ are optimized only with $\delta_M$. This process makes model training $M$ times slower. In contrast, while computing the gradient for the perturbation $\delta$, "free" training simultaneously produces the model parameter $\theta$ on the same backward pass. Note that $X$ is augmented with additive perturbations $\delta_\text{1:M}$, of which each can have a maximum scale of $m\cdot \alpha$, $m \in \lbrace 1, ..., M \rbrace$. This greatly adds to the diversity of the augmentation. However, the "free" algorithm is sub-optimal in terms of min-max optimization that during the batch-relay process, the approximated perturbation computed to maximize the objective $\theta_t$ is used to robustly optimize $\theta_\text{t + 1}$ rather than $\theta_t$. To tackle this problem, instead of directly updating $\theta$ using the "by-product" gradient attained from the gradient ascent step on $\delta$, we can accumulate the gradients and apply them to the model parameters all at once later. Formally, the optimization step is
+
+$$\theta_\text{i + 1} = \theta_i - \frac{\tau}{M} \sum_{t = 1}^M \nabla_\theta L(f_\theta(x + \delta_t), y)$$
+
+where $\tau$ is learning rate and $\delta_1$ is uniform noise.
