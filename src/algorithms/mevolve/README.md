@@ -52,4 +52,6 @@ where $g(G_i, y) = 1$ if and only if $\mathcal{C}(G_i) = y$ and $-1$ otherwise, 
 
 $$\Phi[(\theta - r_i)\cdot g(G_i, y)] = \max \lbrace 0, \text{sgn}((\theta - r_i)\cdot g(G_i, y)) \rbrace$$
 
-But we have still the sign function that is not continuous, since it has a discontinuity in 0, moreover it is not convex. To overcome this problem we can use an approximation of that function, that is indeed continuous, i.e. the hyperbolic tangent. In fact, we know that for $\beta \gg 1$ it results $\text{sgn}(x) = \lim_{\beta \to \infty} \tanh(\beta \cdot x)$
+But we have still the sign function that is not continuous, since it has a discontinuity in 0, moreover it is not convex. To overcome this problem we can use an approximation of that function, that is indeed continuous, i.e. the hyperbolic tangent. In fact, we know that for $\beta \gg 1$ it results $\text{sgn}(x) \approx \lim_{\beta \to \infty} \tanh(\beta \cdot x)$. So, the final form is
+
+$$\theta = \arg \min_\theta \sum_{(G_i, y) \in \mathcal{D}_\text{val}} \max \lbrace 0, \tanh(\beta \cdot (\theta - r_i) \cdot g(G_i, y)) \rbrace$$
