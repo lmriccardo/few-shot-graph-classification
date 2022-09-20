@@ -48,4 +48,4 @@ where $\Omega_k$ is the total number of graphs belonging to class $k$ in $\mathc
 
 $$\theta = \arg \min_\theta \sum_{(G_i, y) \in \mathcal{D}_\text{val}} \Phi[(\theta - r_i)\cdot g(G_i, y)]$$
 
-where $g(G_i, y) = 1$ if and only if $\mathcal{C}(G_i) = y$ and $-1$ otherwise, and $\Phi[x] = 1$ if $x > 0$, 0 otherwise. 
+where $g(G_i, y) = 1$ if and only if $\mathcal{C}(G_i) = y$ and $-1$ otherwise, and $\Phi[x] = 1$ if $x > 0$, 0 otherwise. Now, the question is: *How do we compute $\theta$*? This setting is a simple minimization problem that can be solved finding a closed-form solution. However, the function $\Phi$ is not convex. The idea, is to transform $\Phi[(\theta - r_i)\cdot g(G_i, y)]$ a little bit, of course preserving its semantic meaning. 
