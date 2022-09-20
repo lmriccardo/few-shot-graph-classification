@@ -8,3 +8,4 @@ Mixup improves generalization and robustness of neural networks by interpolating
 
 ## Proposed method
 
+Given two different graph set $\mathcal{G}$ and $\mathcal{H}$ with different labels and topologies, we estimate graphons $W_\mathcal{G}$ and $W_\mathcal{H}$, then mixup and obtain $W_\mathcal{I}$. 
