@@ -14,4 +14,6 @@ Given two different graph set $\mathcal{G}$ and $\mathcal{H}$ with different lab
 
 $$t(H, G) = \frac{\text{hom}(H, G)}{|V(G)|^\text{|V(H)|}}$$
 
-**Graphons**
+**Graphons**. They are continuous, bounded and symmetric functions $W : [0,1]^2 \to [0, 1]$ such that given $u_i, u_j \in [0, 1]$ then $W(u_i, u_j)$ is the probability that the edge $(u_i, u_j)$ exists. Thanks to this, graph can be easily extended to a degree distribution function in graphons $d_w (x) = \int_0^1 W(x, y) \mathrm{d}x$. Similarly the concept of homomorphism density can be easily extended from graph to graphons. Given an arbitary motif $F$ its homomorphism density with respect to the function $W$ is defined as 
+
+$$t(F, W) = \int_{[0,1]^\text{V(F)}} \prod_{(i, j) \in E(F)} W(x_i, x_j) \prod_{i \in V(F)}\mathrm{d}x_i$$
