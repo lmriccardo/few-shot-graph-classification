@@ -15,7 +15,7 @@ import math
 
 class AdaptiveStepMAML(nn.Module):
     """ The Meta-Learner Class """
-    def __init__(self, model: nn.Module, kwargs, paper: bool=False) -> None:
+    def __init__(self, model: nn.Module, paper: bool, **kwargs) -> None:
         super(AdaptiveStepMAML, self).__init__()
         
         self.net                = model

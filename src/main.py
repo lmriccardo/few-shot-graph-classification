@@ -6,7 +6,9 @@ sys.path.append(os.getcwd())
 from data.dataset import get_dataset
 from utils.utils import configure_logger, setup_seed
 from utils.trainer import Trainer
-from algorithms.asmaml.asmaml import AdaptiveStepMAML
+from algorithms.asmaml.asmaml1 import AdaptiveStepMAML
+
+import paper
 
 import argparse
 import config
@@ -175,17 +177,28 @@ def main() -> None:
     print(configurations, file=sys.stdout if not configs["file_log"] else open(logger.handlers[1].baseFilename, mode="a"))
 
     # Set the seed
-    setup_seed(4012)
+    setup_seed(0)
 
     # TODO: Set to use the pre-trained model
     # Run the trainer
     meta_model = AdaptiveStepMAML if configs["use_asmaml"] else None
     save_suffix = "ASMAML_" if configs["use_asmaml"] else "_"
+
+    # For paper
+    train_ds = paper.get_dataset()
+    val_ds = paper.get_dataset(val=True)
+
     optimizer = Trainer(
         train_ds=train_ds, val_ds=val_ds, logger=logger, 
-        meta_model=meta_model, save_suffix=save_suffix,
+        meta_model=meta_model, save_suffix=save_suffix, paper=True,
         **configs
     )
+
+    train_dl = paper.get_dataloader(train_ds, 3, 10, 15, 200, 1)
+    val_dl = paper.get_dataloader(val_ds, 3, 10, 15, 200, 1)
+
+    optimizer.train_dl = train_dl
+    optimizer.validation_dl = val_dl
 
     optimizer.run()
 

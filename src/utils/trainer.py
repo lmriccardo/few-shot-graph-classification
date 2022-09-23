@@ -1,3 +1,4 @@
+from copy import deepcopy
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -150,13 +151,12 @@ class Trainer:
             "outer_lr"           : self.outer_lr,
             "stop_lr"            : self.stop_lr,
             "patience"           : self.patience,
-            "paper"              : self.paper,
             "weight_decay"       : self.weight_decay,
             "scis"               : self.scis,
             "schs"               : self.schs
         }
 
-        meta = self.meta_model_cls(self.model, mm_configuration).to(self.device)
+        meta = self.meta_model_cls(self.model, self.paper, **mm_configuration).to(self.device)
         self.model2save = meta
         
         if self.is_train_oh or self.is_validation_oh:
@@ -190,7 +190,8 @@ class Trainer:
 
         @FlagGDA.flag(
             gnn=self.model, criterion=self.meta_model.loss, data=flag_data, 
-            targets=flag_data.y, iterations=self.flag_m, step_size=self.ass, 
+            targets=flag_data.y if flag_data is not None else None, 
+            iterations=self.flag_m, step_size=self.ass, 
             use=self.use_flag, optimizer=self.meta_model.meta_optim, 
             oh_labels=self.is_train_oh, device=self.device
         )
@@ -287,7 +288,7 @@ class Trainer:
                 if not self.paper:
                     support_data, support_data_list, query_data, query_data_list = data
                 else:
-                    support_data, query_data
+                    support_data, query_data, _ = data
                 
                 self._meta_train_step(
                     support_data=support_data, query_data=query_data,
@@ -389,7 +390,7 @@ class Trainer:
                 if not self.paper:
                     support_data, _, query_data, _ = data
                 else:
-                    support_data, query_data = data
+                    support_data, query_data, _ = data
                     
                 self._val_step(support_data, val_accs, query_data)
                 continue
@@ -413,11 +414,20 @@ class Trainer:
                 )
             )
 
+            train_dataloader = deepcopy(self.train_dl)
+            self.train_dl = self.train_dl(epoch)
+
+            validation_dataloader = deepcopy(self.validation_dl)
+            self.validation_dl = self.validation_dl(epoch)
+
             self.logger.debug("Epoch Number {:04d}".format(epoch))
             print("Epoch Number {:04d}".format(epoch))
 
             train_accs, train_final_losses, _ = self._train()
             val_accs = self._validation()
+
+            self.validation_dl = validation_dataloader
+            self.train_dl = train_dataloader
 
             val_acc_avg = np.mean(val_accs)
             train_acc_avg = np.mean(train_accs)

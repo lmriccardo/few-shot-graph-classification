@@ -104,7 +104,7 @@ class AdaptiveStepMAML(nn.Module):
 
                 logits, score, _= self.net(support_nodes_, support_edge_index_, support_graph_indicator_)
 
-                loss=self.com_loss(logits,support_label_)
+                loss = self.com_loss(logits,support_label_)
                 stop_pro=0
                 grad = torch.autograd.grad(loss, fast_parameters, create_graph=True)
                 try:
