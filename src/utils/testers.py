@@ -1,12 +1,12 @@
-from data.dataset import GraphDataset
-from data.dataloader import FewShotDataLoader, get_dataloader
+import torch_geometric.data as pyg_data
+
+from data.dataset import GraphDataset, OHGraphDataset
+from data.dataloader import FewShotDataLoader, GraphDataLoader, get_dataloader
 from models.gcn4maml import GCN4MAML
 from models.sage4maml import SAGE4MAML
 from algorithms.asmaml.asmaml import AdaptiveStepMAML
-from utils.utils import elapsed_time, setup_seed
-
+from utils.utils import elapsed_time
 from typing import Union, List
-from torch_geometric.data import Data
 from tqdm import tqdm
 
 import logging
@@ -16,101 +16,95 @@ import sys
 import torch
 
 
-class ASMAMLTester:
-    """Class for run tests using the best model from training"""
-    def __init__(self, test_ds: GraphDataset, logger: logging.Logger, best_model_path: str,
-                       dataset_name: str="TRIANGLES", model_name: str="sage", 
-                       paper: bool=False) -> None:
-        self.test_ds = test_ds
-        self.logger = logger
-        self.dataset_name = dataset_name
-        self.model_name = model_name
-        self.paper = paper
-        self.best_model_path = best_model_path
+class Tester(object):
+    """
+    Tester class
 
-        self.model = self.get_model()
-        self.meta_model = self.get_meta()
+    Args:
+        test_ds (GraphDataset | OHGraphDataset): the dataset for testing
+        model_filename (str): the path of the saved torch model
+        logger (logging.Logger): a sinple logger
+        model (Optional[AdaptiveStepMAML], default=None): the model to test
+        test_way (int, default=3): number of classes for test
+        test_shot (int, default=10): number of support graphs per class
+        test_query (int, default=15): number of query graphs per class
+        batch_size (int, default=1): the size of each batch
+        test_episode (int, default=200): number of batch per episode
+        device (str, default="cpu"): the device to use
+        dl_type (FewShotDataLoader | GraphDataLoader, default=FewShotDataLoader):
+            the type of dataloader to use
+    """
+    def __init__(
+        self, test_ds: GraphDataset | OHGraphDataset, model_filename: str, logger: logging.Logger,
+        model: AdaptiveStepMAML, test_way: int=config.TEST_WAY, test_shot: int=config.VAL_SHOT, 
+        test_query: int=config.VAL_QUERY, batch_size: int=config.BATCH_SIZE, test_episode: int=config.VAL_EPISODE,
+        device: str=config.DEVICE, dl_type: FewShotDataLoader | GraphDataLoader=FewShotDataLoader
+    ) -> None:
+        #.
+        self.test_ds        = test_ds
+        self.model_filename = model_filename
+        self.model          = model
+        self.test_way       = test_way
+        self.test_shot      = test_shot
+        self.test_query     = test_query
+        self.batch_size     = batch_size
+        self.test_episode   = test_episode
+        self.device         = device
+        self.dl_type        = dl_type
 
-        # Using the pre-trained model, i.e. the best model resulted during training
-        saved_models = torch.load(self.best_model_path)
-        self.meta_model.load_state_dict(saved_models["embedding"])
-        self.model = self.meta_model.net
+        self.shuffle = True
 
-    
-    def get_model(self) -> Union[GCN4MAML, SAGE4MAML]:
-        """Return the model to use with the MetaModel"""
-        models = {'sage': SAGE4MAML, 'gcn': GCN4MAML}
-        model = models[self.model_name](num_classes=config.TRAIN_WAY, paper=self.paper).to(config.DEVICE)
-        self.logger.debug(f"Creating model of type {model.__class__.__name__}")
-        return model
+        # Load the saved model
+        self._load()
 
-    def get_meta(self) -> AdaptiveStepMAML:
-        """Return the meta model"""
-        self.logger.debug(f"Creating the AS-MAML model")
-        return AdaptiveStepMAML(self.model,
-                                inner_lr=config.INNER_LR,
-                                outer_lr=config.OUTER_LR,
-                                stop_lr=config.STOP_LR,
-                                weight_decay=config.WEIGHT_DECAY,
-                                paper=self.paper).to(config.DEVICE)
-    
-    def run_one_step_test(self, support_data: Data, query_data: Data, 
-                                val_accs: List[float], query_losses_list: List[float]) -> None:
-        """Run one single step of testing"""
-        support_data = support_data.pin_memory()
-        support_data = support_data.to(config.DEVICE)
+        self.test_dl = self._get_dataloader()
 
-        query_data = query_data.pin_memory()
-        query_data = query_data.to(config.DEVICE)
+    def _load(self) -> None:
+        """ Load the saved state dict into the model """
+        state_dict = torch.load(self.model_filename)["embedding"]
+        self.model.load_state_dict(state_dict)
 
-        accs, step, _, _, query_losses = self.meta_model.finetuning(support_data, query_data)
-
-        val_accs.append(accs[step])
-        query_losses_list.extend(query_losses)
-    
-    def get_dataloader(self) -> FewShotDataLoader:
-        """Return test dataloader"""
-        self.logger.debug("--- Creating the DataLoader for Testing ---")
+    def _get_dataloader(self) -> FewShotDataLoader | GraphDataLoader:
+        """ Return a dataloader for the test set """
         test_dataloader = get_dataloader(
-            ds=self.test_ds, n_way=config.TEST_WAY, k_shot=config.VAL_SHOT,
-            n_query=config.VAL_QUERY, epoch_size=config.VAL_EPISODE,
-            shuffle=True, batch_size=1
-        )
+            self.test_ds, self.test_way, self.test_shot, 
+            self.test_query, self.test_episode, 
+            self.shuffle, self.batch_size, dl_type=self.dl_type)
+
+        self.logger.debug("Created dataloader for testing of type: {}".format(
+            test_dataloader.__class__.__name__
+        ))
 
         return test_dataloader
+
+    def _test_step(self, support_data: pyg_data.Data, query_data: pyg_data.Data) -> Any:
+        """ Run a single step of test """
+        if self.device != "cpu":
+            support_data = support_data.to(self.device)
+            query_data = query_data.to(self.device)
+
+        accs, step, _, _, query_losses = self.model.finetuning(support_data, query_data)
+        return accs, step, query_losses
+
+    def _test(self) -> List[float]:
+        """ Run the test """
+        val_accs = []
+        self.model.eval()
+        for _, data in enumerate(tqdm(self.test_dl(1)), 1):
+            support_data, _, query_data, _ = data
+            accs, step, _ = self._test_step(support_data, query_data)
+            val_accs.append(accs[step])
+
+        return val_accs
     
     @elapsed_time
-    def test(self):
-        """Run testing"""
-        setup_seed(1)
+    def test(self) -> None:
+        """ Run test """
+        self.logger.debug("Start Testing")
 
-        test_dl = self.get_dataloader()
-
-        print("=" * 40 + " Starting Testing " + "=" * 40)
-        self.logger.debug("Starting Testing")
-
-        val_accs = []
-        query_losses_list = []
-        self.meta_model.eval()
-
-        for _, data in enumerate(tqdm(test_dl)):
-            support_data, _, query_data, _ = data
-            self.run_one_step_test(support_data, query_data, val_accs, query_losses_list)
-        
+        val_accs = self._test()
         val_acc_avg = np.mean(val_accs)
-        val_acc_ci95 = 1.96 * np.std(np.array(val_accs)) / np.sqrt(config.VAL_EPISODE)
-        query_losses_avg = np.array(query_losses_list).mean()
-        query_losses_min = np.array(query_losses_list).min()
+        val_acc_ci95 = 1.96 * np.std(np.array(val_accs)) / np.sqrt(self.test_episode)
 
-        printable_string = (
-            "\nTEST FINISHED --- Results\n"        +
-            "\tTesting Accuracy: {:.2f} ±{:.2f}\n" + 
-            "\tQuery Losses Avg: {:.6f}\n"         +
-            "\tMin Query Loss: {:.6f}\n"
-            ).format(
-                val_acc_avg, val_acc_ci95,
-                query_losses_avg, query_losses_min
-            )
-
-        print(printable_string)
-        print(printable_string, file=sys.stdout if not config.FILE_LOGGING else open(self.logger.handlers[1].baseFilename, mode="a"))
+        print("Final Resulting Accuracy: {:.2f} ±{:.26f}".format(val_acc_avg, val_acc_ci95))
+        self.logger.debug("Ended Testing")

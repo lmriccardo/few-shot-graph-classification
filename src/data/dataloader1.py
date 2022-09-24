@@ -8,7 +8,7 @@ from data.sampler import TaskBatchSampler
 from data.dataset import GraphDataset, OHGraphDataset
 from utils.utils import setup_seed, data_batch_collate, rename_edge_indexes
 from config import T
-from typing import Tuple, List, Generic
+from typing import Tuple, List, Generic, Optional
 from functools import partial
 from collections.abc import Iterable
 
@@ -43,7 +43,7 @@ class FewShotDataLoader(object):
         for name, value in attrs.items():
             self.__setattr__(name, value)
 
-    def _configure_sampler(self) -> FewShotSampler:
+    def _configure_sampler(self) -> TaskBatchSampler:
         """ Return a TaskBatchSampler instance """
         tb_sampler = TaskBatchSampler(
             self.dataset.get_graphs_per_label(), 
@@ -80,7 +80,7 @@ class FewShotDataLoader(object):
             # First generate single data for the datalist
             data_list.append(pyg_data.Data(x=x, edge_index=edge_index, y=label))
 
-            row1, row2 = egde_index.tolist()
+            row1, row2 = edge_index.tolist()
             nodes = edge_index[0].unique(sorted=True).tolist()
 
             # Append node attributes
@@ -106,7 +106,7 @@ class FewShotDataLoader(object):
             graph_indicator.extend([index] * x.shape[0])
         
         return (
-            node_attributes, edge_indices, torch.Tensor(labels).long()
+            node_attributes, edge_indices, torch.Tensor(labels).long(),
             torch.tensor(graph_indicator), data_list
         )
 

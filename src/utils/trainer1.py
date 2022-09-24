@@ -182,8 +182,8 @@ class Trainer(object):
         """ Returns two dataloader: one for train and the other for validation """
         train_dataloader = get_dataloader(
             self.train_ds, self.train_way, self.train_shot, 
-            self.train_query, self.epoch_size, self.shuffle, 
-            self.batch_size)
+            self.train_query, self.train_episode, self.shuffle, 
+            self.batch_size, dl_type=self.dl_type)
 
         self.logger.debug("Created dataloader for training of type: {}".format(
             train_dataloader.__class__.__name__
@@ -191,8 +191,8 @@ class Trainer(object):
 
         validation_datalaoder = get_dataloader(
             self.val_ds, self.val_way, self.val_shot, 
-            self.val_query, self.epoch_size, self.shuffle, 
-            self.batch_size)
+            self.val_query, self.val_episode, self.shuffle, 
+            self.batch_size, dl_type=self.dl_type)
 
         self.logger.debug("Created dataloader for validation of type: {}".format(
             validation_dataloader.__class__.__name__
@@ -354,9 +354,11 @@ class Trainer(object):
             printable_string += (
                 "\tAvg Train Loss: {:.6f}, Avg Train Accuracy: {:.6f}\n" +
                 "\tAvg Validation Accuracy: {:.2f} ±{:.26f}\n" +
+                "\tMeta Learning Rate: {}\n" +
                 "\tBest Current Validation Accuracy: {:.2f}").format(
                     train_loss_avg, train_acc_avg,
-                    val_acc_avg, val_acc_ci95, max_val_acc
+                    val_acc_avg, val_acc_ci95, 
+                    self.meta.get_meta_learning_rate(), max_val_acc
                 )
 
             print(printable_string, file=sys.stdout if not self.file_log else open(
