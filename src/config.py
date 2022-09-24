@@ -67,6 +67,7 @@ BATCH_PER_EPISODES = 5    # How many batch per episode
 EPOCHS             = 500  # How many epochs
 PATIENCE           = 35
 GRAD_CLIP          = 5
+BATCH_SIZE         = 1
 
 STOP_CONTROL_INPUT_SIZE = 2
 STOP_CONTROL_HIDDEN_SIZE = 20
