@@ -160,25 +160,25 @@ def main(test_: bool=False):
 
     model = SAGE4MAML(
         num_classes=config.TRAIN_WAY, paper=False,
-        num_features=config.NUM_FEATURES["COIL-DEL"]
+        num_features=config.NUM_FEATURES["TRIANGLES"]
     )
 
     meta = AdaptiveStepMAML(model, False, **mm_configuration)
 
-    logger = configure_logger(dataset_name="COIL-DEL")
+    logger = configure_logger(dataset_name="TRIANGLES")
     # train_ds = paper.get_dataset()
     # val_ds = paper.get_dataset(val=True)
     # train_dl = paper.get_dataloader(train_ds, 3, 10, 15, 200, 1)
     # val_dl = paper.get_dataloader(val_ds, 3, 10, 15, 200, 1)
 
-    train_ds, val_ds, test_ds, _ = get_dataset(logger=logger, dataset_name="COIL-DEL")
+    train_ds, val_ds, test_ds, _ = get_dataset(logger=logger, dataset_name="TRIANGLES")
     if not test_:
         train_dl = get_dataloader(train_ds, 3, 10, 15, 200, True, 1)
         val_dl = get_dataloader(val_ds, 3, 10, 15, 200, True, 1)
     
         run(sconfig, meta, train_dl, val_dl)
     else:
-        meta_model = torch.load("../models/COIL-DEL_best_model.pth")
+        meta_model = torch.load("../models/TRIANGLES_AdaptiveStepMAML_SAGE4MAML_bestModel.pth")
         meta.load_state_dict(meta_model["embedding"])
         test_dl = get_dataloader(test_ds, 3, 10, 15, 200, True, 1)
         test(sconfig, meta, test_dl)
@@ -187,7 +187,7 @@ def main(test_: bool=False):
 
 if __name__ == "__main__":
     # Train
-    main()
+    # main()
 
     # Test
-    # main(True)
+    main(True)
