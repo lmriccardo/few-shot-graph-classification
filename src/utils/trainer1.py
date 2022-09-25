@@ -5,15 +5,14 @@ import torch.nn.functional as F
 import torch_geometric.data as pyg_data
 import numpy as np
 
-from torch.nn.modules.loss import _Loss, _WeightedLoss
 from algorithms.asmaml.asmaml1 import AdaptiveStepMAML
 from algorithms.gmixup.gmixup import OHECrossEntropy
 from models.sage4maml import SAGE4MAML
 from models.gcn4maml import GCN4MAML
-from data.dataset import get_dataset, GraphDataset, OHGraphDataset
-from data.dataloader import get_dataloader, FewShotDataLoader, GraphDataLoader
-from utils.utils import configure_logger, elapsed_time
-from typing import Union, Tuple, List, Optional, Dict, Any
+from data.dataset import GraphDataset, OHGraphDataset
+from data.dataloader1 import get_dataloader, FewShotDataLoader, GraphDataLoader
+from utils.utils import elapsed_time
+from typing import Tuple, List, Optional, Any
 from tqdm import tqdm
 
 import config
@@ -29,7 +28,7 @@ class Trainer(object):
 
     Args:
         train_ds (GraphDataset or OHGraphDataset): the train set
-        val_ds (GraphDataset or OHGraphDataset): the validation set
+        validation_ds (GraphDataset or OHGraphDataset): the validation set
         logger (logging.Logger): a simple logger
         model_name (str, default=sage): the name of the model to use
         meta_model (Optional[AdaptiveStepMAML], default=None): the meta model class to use
@@ -91,7 +90,7 @@ class Trainer(object):
         schs: int=config.STOP_CONTROL_HIDDEN_SIZE, beta: float=config.BETA, n_fold: int=config.N_FOLD, 
         n_xval: int=config.N_CROSSVALIDATION, iters: int=config.ITERATIONS, heuristic: str=config.HEURISTIC,
         lrts: int=config.LABEL_REL_THRESHOLD_STEPS, lrtb: int=config.LABEL_REL_THRESHOLD_BETA,
-        flag_m: int=config.M, ass: float=config.ATTACK_STEP_SIZE, file_log: bool=False
+        flag_m: int=config.M, ass: float=config.ATTACK_STEP_SIZE, file_log: bool=False, **kwargs
     ) -> None:
         # .
         self.train_ds      = train_ds
@@ -189,8 +188,8 @@ class Trainer(object):
             train_dataloader.__class__.__name__
         ))
 
-        validation_datalaoder = get_dataloader(
-            self.val_ds, self.val_way, self.val_shot, 
+        validation_dataloader = get_dataloader(
+            self.validation_ds, self.test_way, self.val_shot, 
             self.val_query, self.val_episode, self.shuffle, 
             self.batch_size, dl_type=self.dl_type)
 
@@ -242,7 +241,7 @@ class Trainer(object):
         meta = self.meta_model(self.model, False, **configurations).to(self.device)
         self.model2save = meta
 
-        if self.is_train_oh or self.is_validation_oh:
+        if self.is_oh_train or self.is_oh_validation:
             meta.loss = OHECrossEntropy()
 
         return meta
@@ -258,7 +257,7 @@ class Trainer(object):
 
     def _train(self, epoch: int=0) -> Tuple[List[float], List[float], List[float]]:
         """ Run the training """
-        self.logger.debug("Starting Training phase", file=sys.stdout if not self.file_log else open(
+        print("Starting Training phase", file=sys.stdout if not self.file_log else open(
             self.logger.handlers[1].baseFilename, mode="a"
         ))
 
@@ -281,7 +280,7 @@ class Trainer(object):
                         self.logger.handlers[1].baseFilename, mode="a"
                 ))
 
-        self.logger.debug("Ended Training Phase", file=sys.stdout if not self.file_log else open(
+        print("Ended Training Phase", file=sys.stdout if not self.file_log else open(
             self.logger.handlers[1].baseFilename, mode="a"
         ))
         return train_accs, train_final_losses, train_total_losses
@@ -307,7 +306,7 @@ class Trainer(object):
         val_accs = []
         for i, data in enumerate(tqdm(self.validation_dl(epoch)), 1):
             support_data, _, query_data, _ = data
-            accs, step, query_losses = self._validation_step(support_data, query_data)
+            accs, step, _ = self._validation_step(support_data, query_data)
             val_accs.append(accs[step])
 
         print("Ended Validation Phase", file=sys.stdout if not self.file_log else open(
@@ -351,7 +350,7 @@ class Trainer(object):
             else:
                 printable_str = "Epoch {:04d}\n".format(epoch)
 
-            printable_string += (
+            printable_str += (
                 "\tAvg Train Loss: {:.6f}, Avg Train Accuracy: {:.6f}\n" +
                 "\tAvg Validation Accuracy: {:.2f} ±{:.26f}\n" +
                 "\tMeta Learning Rate: {}\n" +
@@ -361,7 +360,7 @@ class Trainer(object):
                     self.meta.get_meta_learning_rate(), max_val_acc
                 )
 
-            print(printable_string, file=sys.stdout if not self.file_log else open(
+            print(printable_str, file=sys.stdout if not self.file_log else open(
                     self.logger.handlers[1].baseFilename, mode="a"
                 )
             )

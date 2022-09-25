@@ -13,6 +13,23 @@ from functools import partial
 from collections.abc import Iterable
 
 
+def uncollate(sampler, batch):
+    n_way = sampler.task_sampler.n_way
+    k_shot = sampler.task_sampler.k_shot
+    batch_size = sampler.task_batch_size
+
+    idxs = torch.arange(start=0, end=len(batch), step=1).view(batch_size, -1)
+    support_batch = []
+    query_batch = []
+    
+    for support_query_idxs in idxs:
+        support_idx, query_idx = support_query_idxs[: (n_way * k_shot)], support_query_idxs[(n_way * k_shot):]
+        support_batch.extend([batch[x] for x in support_idx.tolist()])
+        query_batch.extend([batch[x] for x in query_idx.tolist()])
+        
+    return support_batch, query_batch
+
+
 def _collate(_batch: Generic[T], oh_labels: bool=False) -> Tuple[pyg_data.Data, List[pyg_data.Data]]:
     data_list = []
 
@@ -116,7 +133,7 @@ class FewShotDataLoader(object):
     ]:
         """ Sample a pair of support and query set """
         # 1. First sample graph indices
-        support_ids, query_ids = next(iter(self.task_sampler))
+        support_ids, query_ids = uncollate(self.task_sampler, next(iter(self.task_sampler)))
 
         # 2. Get support graph data
         support_data = self._collate_graphdata(support_ids)
@@ -164,6 +181,9 @@ class FewShotDataLoader(object):
             num_workers=self.num_workers,
             shuffle=self.shuffle
         )
+    
+    def __call__(self, epoch: int=0) -> DataLoader:
+        return self._get_iterator(epoch)
 
 
 class GraphDataLoader(DataLoader):
