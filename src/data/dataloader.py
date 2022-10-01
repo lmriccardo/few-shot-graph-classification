@@ -1,4 +1,5 @@
 import torch
+import torch.multiprocessing
 import torch_geometric.data as pyg_data
 
 
@@ -11,6 +12,9 @@ from config import T
 from functools import partial
 
 import torchnet as tnt
+
+def set_worker_sharing_strategy(worker_id: int) -> None:
+    torch.multiprocessing.set_sharing_strategy("file_system")
 
 
 def uncollate(sampler, batch):
@@ -142,7 +146,7 @@ def coll(batch):
 class FewShotDataLoader(object):
     def __init__(self, dataset: GraphDataset | OHGraphDataset, **kwargs) -> None:
         self.dataset = dataset
-        self.num_workers = 2
+        self.num_workers = 1
         self.setattr(**kwargs)
         
         self.labels = self.dataset.get_graphs_per_label()
@@ -206,7 +210,7 @@ class FewShotDataLoader(object):
 
             # First generate single data for the datalist
             data_list.append(pyg_data.Data(x=x, edge_index=edge_index, y=label))
-
+            
             row1, row2 = edge_index.tolist()
             nodes = edge_index[0].unique(sorted=True).tolist()
             
@@ -276,7 +280,8 @@ class FewShotDataLoader(object):
             batch_size=self.batch_size,
             collate_fn=coll,
             num_workers=self.num_workers,
-            shuffle=False
+            shuffle=False,
+            worker_init_fn=set_worker_sharing_strategy
         )
     
     def __call__(self, epoch: int):

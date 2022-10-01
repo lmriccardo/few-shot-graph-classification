@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torch_scatter import scatter_add
 from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.utils import add_remaining_self_loops
-from models.utils import glorot, zeros, uniform
+from models.functions import glorot, zeros, uniform
 from models.linear import LinearModel
 
 
