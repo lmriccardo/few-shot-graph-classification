@@ -85,7 +85,7 @@ def run(config, meta_model, train_loader, val_loader):
 
             torch.save({'epoch': epoch, 'embedding':meta_model.state_dict(),
                         # 'optimizer': optimizer.state_dict()
-                        }, os.path.join(config["save_path"], 'Letter-High_AdaptiveStepMAML_SAGE4MAML_bestModel.pth'))
+                        }, os.path.join(config["save_path"], 'Letter-High_AdaptiveStepMAML_GCN4MAML_bestModel.pth'))
         else :
             print('\nEpoch: {:04d},loss_train: {:.6f},acc_train: {:.6f},'
                                     'acc_val:{:.2f} ±{:.2f},meta_lr: {:.6f},time: {:.2f}s,best {:.2f}'
@@ -161,7 +161,7 @@ def main(test_: bool=False):
         "schs"               : config.STOP_CONTROL_HIDDEN_SIZE
     }
 
-    model = SAGE4MAML(
+    model = GCN4MAML(
         num_classes=config.TRAIN_WAY, paper=False,
         num_features=config.NUM_FEATURES["Letter-High"]
     )
@@ -184,7 +184,7 @@ def main(test_: bool=False):
     
         run(sconfig, meta, train_dl, val_dl)
     else:
-        meta_model = torch.load("../models/Letter-High_AdaptiveStepMAML_SAGE4MAML_bestModel.pth")
+        meta_model = torch.load("../models/Letter-High_AdaptiveStepMAML_GCN4MAML_bestModel.pth")
         meta.load_state_dict(meta_model["embedding"])
         test_dl = get_dataloader(test_ds, 2, 10, 15, 200, True, 1)
         test(sconfig, meta, test_dl)
@@ -193,7 +193,7 @@ def main(test_: bool=False):
 
 if __name__ == "__main__":
     # Train
-    main()
+    # main()
 
     # Test
-    # main(True)
+    main(True)
