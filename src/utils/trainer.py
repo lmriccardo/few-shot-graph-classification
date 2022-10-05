@@ -1,126 +1,199 @@
-from copy import deepcopy
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import torch_geometric.data as pyg_data
+import numpy as np
 
-from torch.nn.modules.loss import _Loss, _WeightedLoss
-from data.dataset import GraphDataset, OHGraphDataset
-from data.dataloader import FewShotDataLoader, GraphDataLoader, get_dataloader
-from models.gcn4maml import GCN4MAML
-from models.sage4maml import SAGE4MAML
 from algorithms.asmaml.asmaml import AdaptiveStepMAML
-from algorithms.flag.flag import FlagGDA
 from algorithms.gmixup.gmixup import OHECrossEntropy
-from algorithms.mevolve.mevolve import MEvolveGDA
-from utils.utils import elapsed_time, setup_seed, \
-                        data_batch_collate, rename_edge_indexes, \
-                        compute_accuracy
-from utils.kfold import KFoldCrossValidationWrapper
-
-from typing import Union, Tuple, List, Optional, Dict, Any
+from models.sage4maml import SAGE4MAML
+from models.gcn4maml import GCN4MAML
+from data.dataset import GraphDataset, OHGraphDataset
+from data.dataloader import get_dataloader, FewShotDataLoader, GraphDataLoader
+from utils.utils import elapsed_time
+from typing import Tuple, List, Optional, Any
 from tqdm import tqdm
 
-import logging
 import config
-import numpy as np
-import sys
 import os
+import sys
+import logging
 
 
-class Trainer:
+class Trainer(object):
     """
     A simple trainer class to train a model
     on the train and validation set
 
     Args:
         train_ds (GraphDataset or OHGraphDataset): the train set
-        val_ds (GraphDataset or OHGraphDataset): the validation set
-        model_name (str): the name of the model to use ('sage' or 'gcn')
+        validation_ds (GraphDataset or OHGraphDataset): the validation set
         logger (logging.Logger): a simple logger
-        paper (bool): if paper dataset is used or not
+        model_name (str, default=sage): the name of the model to use
         meta_model (Optional[AdaptiveStepMAML], default=None): the meta model class to use
-        epochs (int, default=200): number of total epochs to run
-        dataset_name (str, default=TRIANGLES): the name of the used dataset
-        dataloader_type (FewShotDataLoader | GraphDataLoader, default=FewShotDataLoader):
+        save_suffix (str, default=""): the suffix for saving the torch model
+        dl_type (FewShotDataLoader | GraphDataLoader, default=FewShotDataLoader):
             the type of the dataloader to use for training and validation
-        use_mevolve (bool, False): True if MEvolve should be used, false otherwise
-        use_flag (bool, False): True if FLAG is used, false otherwise
-        use_gmixup (bool, False): True if G-Mixup is used, false otherwise
+        dataset_name (str, default="TRIANGLES"): the name of the dataset
+        epochs (int, default=200): the total number of epochs
+        use_mevolve (bool, default=False): True if use M-Evolve or not
+        use_flag (bool, default=False): True if use FLAG or not
+        use_gmixup (bool, default=False): True if use G-Mixup or not
+        save_path (str, default="../models"): The folder where to save the model
+        device (str, default="cpu"): The device to use
+        batch_size (int, default=1): The size of a single batch
+        outer_lr (float, default=0.001): The LR of the outer loop of MAML
+        inner_lr (float, default=0.01): The LR of the inner loop of MAML
+        stop_lr (float, default=0.0001): The LR of the stop control model
+        weight_decay (float, default=1e-05): The Weight Decay of the optimizer
+        max_step (int, default=15): max step
+        min_step (int, default=5): min step
+        penalty (float, default=0.001): the penalty for each step
+        train_shot (int, default=10): the number of support graphs for each class of train
+        val_shot (int, default=10): the number of support graphs for each class of validation
+        train_query (int, default=15): the number of query graphs for each class of train
+        val_query (int, default=15): the number of query graphs for each calss of validation
+        train_way (int, default=3): the number of class to sample for train
+        test_way (int, default=3): the number of class to sample for validation/testing
+        val_episode (int, default=200): the number of episode for validation
+        train_episode (int, default=200): the number of episode for training
+        batch_episode (int, default=5): how many batch per episode
+        patience (int, default=35): the patience
+        grad_clip (int, default=5): grad clipping value
+        scis (int, default=2): stop control model input size
+        schs (int, default=20): stop control model hidden size
+        beta (float, default=0.15): augmentation budget for M-Evolve
+        n_fold (int, default=5): total number of fold
+        n_xval (int, default=10): total number of cross-validation to run
+        iters (int, default=5): total number of M-Evolve iterations
+        heuristic (str, default="random_mapping"): M-Evolve heuristic to use
+        lrts (int, default=1000): total number of step when computing the threshold in M-Evolve
+        lrtb (int, default=30): beta value for sign function approximation
+        flag_m (int, default=3): FLAG iterations number
+        ass (float, default=8e-03): The attack step size of FLAG
+        file_log (bool, default=False): True if log into file or not
     """
     def __init__(
         self, train_ds: GraphDataset | OHGraphDataset, val_ds: GraphDataset | OHGraphDataset,
-        logger: logging.Logger, meta_model: Optional[AdaptiveStepMAML]=None, save_suffix: str="_",
-        dataloader_type: FewShotDataLoader | GraphDataLoader=FewShotDataLoader, paper: bool=False, **kwargs
+        logger: logging.Logger, model_name: str="sage", meta_model: Optional[AdaptiveStepMAML]=None,
+        save_suffix: str="_", dl_type: FewShotDataLoader | GraphDataLoader=FewShotDataLoader,
+        dataset_name: str="TRIANGLES", epochs: int=200, use_mevolve: bool=False, use_flag: bool=False,
+        use_gmixup: bool=False, save_path: str=config.MODELS_SAVE_PATH, device: str=config.DEVICE,
+        batch_size: int=config.BATCH_SIZE, outer_lr: float=config.OUTER_LR, inner_lr: float=config.INNER_LR,
+        stop_lr: float=config.STOP_LR, weight_decay: float=config.WEIGHT_DECAY, max_step: int=config.MAX_STEP,
+        min_step: int=config.MIN_STEP, penalty: float=config.STEP_PENALITY, train_shot: int=config.TRAIN_SHOT,
+        val_shot: int=config.VAL_SHOT, train_query: int=config.TRAIN_QUERY, val_query: int=config.VAL_QUERY,
+        train_way: int=config.TRAIN_WAY, test_way: int=config.TEST_WAY, val_episode: int=config.VAL_EPISODE,
+        train_episode: int=config.TRAIN_EPISODE, batch_episode: int=config.BATCH_PER_EPISODES, 
+        patience: int=config.PATIENCE, grad_clip: int=config.GRAD_CLIP, scis: int=config.STOP_CONTROL_INPUT_SIZE,
+        schs: int=config.STOP_CONTROL_HIDDEN_SIZE, beta: float=config.BETA, n_fold: int=config.N_FOLD, 
+        n_xval: int=config.N_CROSSVALIDATION, iters: int=config.ITERATIONS, heuristic: str=config.HEURISTIC,
+        lrts: int=config.LABEL_REL_THRESHOLD_STEPS, lrtb: int=config.LABEL_REL_THRESHOLD_BETA,
+        flag_m: int=config.M, ass: float=config.ATTACK_STEP_SIZE, file_log: bool=False, **kwargs
     ) -> None:
         # .
-        self.train_ds       = train_ds
-        self.validation_ds  = val_ds
-        self.logger         = logger
-        self.paper          = paper
-        self.meta_model_cls = meta_model
-        self.save_suffix    = save_suffix
-        self.dataloader     = dataloader_type
-        self.kwargs         = kwargs
-        
-        self._setattr(kwargs)
+        self.train_ds      = train_ds
+        self.validation_ds = val_ds
+        self.logger        = logger
+        self.model_name    = model_name
+        self.meta_model    = meta_model
+        self.save_suffix   = save_suffix
+        self.dl_type       = dl_type
+        self.dataset_name  = dataset_name
+        self.epochs        = epochs
+        self.use_mevolve   = use_mevolve
+        self.use_flag      = use_flag
+        self.use_gmixup    = use_gmixup
+        self.save_path     = save_path
+        self.device        = device
+        self.batch_size    = batch_size
+        self.outer_lr      = outer_lr
+        self.inner_lr      = inner_lr
+        self.stop_lr       = stop_lr
+        self.weight_decay  = weight_decay
+        self.max_step      = max_step
+        self.min_step      = min_step
+        self.penalty       = penalty
+        self.train_shot    = train_shot
+        self.val_shot      = val_shot
+        self.train_query   = train_query
+        self.val_query     = val_query
+        self.train_way     = train_way
+        self.test_way      = test_way
+        self.val_episode   = val_episode
+        self.train_episode = train_episode
+        self.batch_episode = batch_episode
+        self.patience      = patience
+        self.grad_clip     = grad_clip
+        self.scis          = scis
+        self.schs          = schs
+        self.beta          = beta
+        self.n_fold        = n_fold
+        self.n_xval        = n_xval
+        self.iters         = iters
+        self.heuristic     = heuristic
+        self.lrts          = lrts
+        self.lrtb          = lrtb
+        self.flag_m        = flag_m
+        self.ass           = ass
+        self.file_log      = file_log
+
+        self.shuffle = True
 
         # Control if the two datasets have OHE labels
-        self.is_train_oh      = isinstance(self.train_ds, OHGraphDataset)
-        self.is_validation_oh = isinstance(self.validation_ds, OHGraphDataset)
+        self.is_oh_train = isinstance(self.train_ds, OHGraphDataset)
+        self.is_oh_validation = isinstance(self.validation_ds, OHGraphDataset)
 
-        # Create dataloaders
-        self.train_dl, self.validation_dl = None, None
-        if not self.paper:
-            self.train_dl, self.validation_dl = self._get_dataloaders()
-        
+        # Create dataloader
+        self.train_dl, self.validation_dl = self._get_dataloaders()
+
         # Create the base model
         self.model = self._get_model()
         self.model2save = self.model
 
-        # Create the meta model if necessary
-        self.meta_model = None
-        if self.meta_model_cls is not None:
-            self.meta_model = self._get_meta_model()
+        # Create the meta model if required
+        self.meta = None
+        if self.meta_model is not None:
+            self.meta = self._get_meta()
 
-    def _setattr(self, kwargs: Dict[str, Any]) -> None:
-        """Set the attribute in the kwargs dict"""
-        for k, v in kwargs.items():
-            setattr(self, k, v)
+        self.save_string = self._build_save_string()
 
-    def _get_model(self) -> Union[GCN4MAML, SAGE4MAML]:
-        """Return the model to use with the MetaModel"""
-        models = {"sage" : SAGE4MAML, "gcn" : GCN4MAML}
-        model = models[self.model_name](
-            num_classes=config.TRAIN_WAY, paper=self.paper,
-            num_features=config.NUM_FEATURES[self.data_name]
-        ).to(self.device)
+    def _build_save_string(self) -> str:
+        """ Return the name of the file where to save the model """
+        save_str = f"{self.dataset_name}_"
 
-        self.logger.debug(f"Creating model of type {model.__class__.__name__}")
-        return model
+        if self.meta_model is not None:
+            save_str += f"{self.meta.__class__.__name__}_"
 
-    def _get_dataloaders(self) -> Tuple[
-        FewShotDataLoader | GraphDataLoader, FewShotDataLoader | GraphDataLoader
-    ]:
-        """Return train and validation dataloader"""
+        save_str += f"{self.model.__class__.__name__}_"
+
+        if self.use_mevolve:
+            return save_str + "MEvolve_bestModel.pth"
+
+        if self.use_flag:
+            return save_str + "FLAG_bestModel.pth"
+
+        if self.use_gmixup:
+            return save_str + "GMixup_bestModel.pth"
+
+        return save_str + "bestModel.pth"
+
+    def _get_dataloaders(self) -> Tuple[FewShotDataLoader | GraphDataLoader, FewShotDataLoader | GraphDataLoader]:
+        """ Returns two dataloader: one for train and the other for validation """
         train_dataloader = get_dataloader(
-            ds=self.train_ds, n_way=self.train_way, k_shot=self.train_shot,
-            n_query=self.train_query, epoch_size=self.train_episode,
-            shuffle=True, batch_size=self.batch_size,
-            oh_labels=self.is_train_oh, dl_type=self.dataloader
-        )
+            self.train_ds, self.train_way, self.train_shot, 
+            self.train_query, self.train_episode, self.shuffle, 
+            self.batch_size, dl_type=self.dl_type)
 
         self.logger.debug("Created dataloader for training of type: {}".format(
             train_dataloader.__class__.__name__
         ))
 
         validation_dataloader = get_dataloader(
-            ds=self.validation_ds, n_way=self.test_way, k_shot=self.val_shot,
-            n_query=self.val_query, epoch_size=self.val_episode,
-            shuffle=True, batch_size=self.batch_size,
-            oh_labels=self.is_validation_oh, dl_type=self.dataloader
-        )
+            self.validation_ds, self.test_way, self.val_shot, 
+            self.val_query, self.val_episode, self.shuffle, 
+            self.batch_size, dl_type=self.dl_type)
 
         self.logger.debug("Created dataloader for validation of type: {}".format(
             validation_dataloader.__class__.__name__
@@ -128,13 +201,24 @@ class Trainer:
 
         return train_dataloader, validation_dataloader
 
-    def _get_meta_model(self) -> AdaptiveStepMAML:
-        """Return the meta model (in this case the only available is AS-MAML)"""
+    def _get_model(self) -> GCN4MAML | SAGE4MAML:
+        """ Return one between GCN or SAGE model """
+        models = {"sage" : SAGE4MAML, "gcn" : GCN4MAML}
+        model = models[self.model_name](
+            num_classes=self.train_way, paper=False,
+            num_features=config.NUM_FEATURES[self.dataset_name]
+        ).to(self.device)
+
+        self.logger.debug(f"Created model of type {model.__class__.__name__}")
+        return model
+
+    def _get_meta(self) -> AdaptiveStepMAML:
+        """ Return the meta model """
         self.logger.debug("Creating the meta-model of type {}".format(
-            self.meta_model_cls.__name__
+            self.meta_model.__name__
         ))
 
-        mm_configuration = {
+        configurations = {
             "inner_lr"           : self.inner_lr,
             "train_way"          : self.train_way,
             "train_shot"         : self.train_shot,
@@ -156,306 +240,136 @@ class Trainer:
             "schs"               : self.schs
         }
 
-        meta = self.meta_model_cls(self.model, self.paper, **mm_configuration).to(self.device)
+        meta = self.meta_model(self.model, False, **configurations).to(self.device)
         self.model2save = meta
-        
-        if self.is_train_oh or self.is_validation_oh:
+
+        if self.is_oh_train or self.is_oh_validation:
             meta.loss = OHECrossEntropy()
 
         return meta
-    
-    def _meta_train_step(
-        self, support_data: pyg_data.Data, query_data: pyg_data.Data, train_accs: List[float],
-        train_total_losses: List[float], train_final_losses: List[float], loop_counter: int,
-        support_data_list: List[pyg_data.Data], query_data_list: List[pyg_data.Data]
-    ) -> None:
-        """Run one episode, i.e. one or more tasks, of training"""
-        flag_data = None
-        if support_data_list is not None and query_data_list is not None:
-            flag_data, _ = data_batch_collate(
-                rename_edge_indexes(support_data_list + query_data_list),
-                oh_labels=self.is_train_oh
-            )
 
-        # If both lists are None then we cannot use FLAG
-        if not flag_data:
-            self.use_flag = False
-
+    def _meta_train_step(self, support_data: pyg_data.Data, query_data: pyg_data.Data) -> Any:
+        """ Run a single train step """
         if self.device != "cpu":
-            support_data = support_data.pin_memory()
             support_data = support_data.to(self.device)
-
-            query_data = query_data.pin_memory()
             query_data = query_data.to(self.device)
 
-        @FlagGDA.flag(
-            gnn=self.model, criterion=self.meta_model.loss, data=flag_data, 
-            targets=flag_data.y if flag_data is not None else None, 
-            iterations=self.flag_m, step_size=self.ass, 
-            use=self.use_flag, optimizer=self.meta_model.meta_optim, 
-            oh_labels=self.is_train_oh, device=self.device
-        )
-        def _run(*args, **kwargs) -> Tuple[List[float], List[float]]:
-            # If we use the GPU then we need to set the GPU
-            accs, step, final_loss, total_loss, _, _, _, _ = self.meta_model(
-                support_data, query_data
-            )
+        accs, step, final_loss, total_loss, *_ = self.meta(support_data, query_data)
+        return accs, step, final_loss, total_loss
+
+    def _meta_train(self, epoch: int=0) -> Tuple[List[float], List[float], List[float]]:
+        """ Run the training """
+        print("Starting Training phase", file=sys.stdout if not self.file_log else open(
+            self.logger.handlers[1].baseFilename, mode="a"
+        ))
+
+        # Set training mode
+        self.meta.train()
+
+        train_accs, train_final_losses, train_total_losses = [], [], []
+        for i, data in enumerate(tqdm(self.train_dl(epoch)), 1):
+            support_data, _, query_data, _ = data
+            accs, step, final_loss, total_loss = self._meta_train_step(support_data, query_data)
 
             train_accs.append(accs[step])
             train_final_losses.append(final_loss)
             train_total_losses.append(total_loss)
 
-            if (loop_counter + 1) % 50 == 0:
-                print(f"({loop_counter + 1})" + (" Mean Accuracy: {:.6f}, Mean Final Loss: {:.6f}" +
-                                                 ", Mean Total Loss: {:.6f}").format(
-                        np.mean(train_accs), 
-                        np.mean(train_final_losses), 
-                        np.mean(train_total_losses)
-                    ), file=sys.stdout if not self.file_log else open(
-                            self.logger.handlers[1].baseFilename, mode="a"
-                        )
-                    )
+            if (i + 1) % 100 == 0:
+                print("({:d}) Mean Accuracy: {:.6f}, Mean Final Loss: {:.6f}, Mean Total Loss: {:.6f}".format(
+                    np.mean(train_accs), np.mean(train_final_losses), np.mean(train_total_losses)
+                ), file=sys.stdout if not self.file_log else open(
+                        self.logger.handlers[1].baseFilename, mode="a"
+                ))
 
-            return train_accs, train_final_losses
-        
-        return _run()
+        print("Ended Training Phase", file=sys.stdout if not self.file_log else open(
+            self.logger.handlers[1].baseFilename, mode="a"
+        ))
+        return train_accs, train_final_losses, train_total_losses
 
-    def _train_step(
-        self, data: pyg_data.Data, train_accs: List[float],
-        train_total_losses: List[float], train_final_losses: List[float], 
-        loop_counter: int, criterion: _Loss | _WeightedLoss, optimizer: optim.Optimizer
-    ) -> None:
-        """Run one step of single and simple training"""
+    def _meta_validation_step(self, support_data: pyg_data.Data, query_data: pyg_data.Data) -> Any:
+        """ Run a single validation step """
         if self.device != "cpu":
-            data = data.to(self.device)
-        
-        @FlagGDA.flag(
-            gnn=self.model, criterion=criterion, data=data, 
-            targets=data.y, iterations=self.flag_m, step_size=self.ass, 
-            use=self.use_flag, optimizer=optimizer, 
-            oh_labels=self.is_train_oh, device=self.device
-        )
-        def _run(*args, **kwargs) -> None:
-            optimizer.zero_grad()
-            logits, _, _ = self.model(data.x, data.edge_index, data.batch)
-            loss = criterion(logits, data.y)
-            loss.backward()
-            optimizer.step()
-
-            with torch.no_grad():
-                preds = F.softmax(logits, dim=1).argmax(dim=1)
-                train_accs.append(compute_accuracy(preds, data.y, self.is_train_oh))
-            
-            train_total_losses.append(loss)
-            train_final_losses.append(loss)
-
-            if (loop_counter + 1) % 50 == 0:
-                print(f"({loop_counter + 1})" + (" Mean Accuracy: {:.6f}, Mean Final Loss: {:.6f}" +
-                                                 ", Mean Total Loss: {:.6f}").format(
-                        np.mean(train_accs), 
-                        train_final_losses[-1], 
-                        np.mean(train_total_losses)
-                    ), file=sys.stdout if not self.file_log else open(
-                            self.logger.handlers[1].baseFilename, mode="a"
-                        )
-                    )
-            
-            return train_accs, train_final_losses
-        
-        return _run()
-
-    def _meta_train(self) -> Tuple[List[float], List[float], List[float]]:
-        """Run MetaTraining"""
-        train_dataloader = None
-
-        @KFoldCrossValidationWrapper.kFold_validation(
-            trainer=self, logger=self.logger,
-            loss=self.meta_model.loss, use=self.use_mevolve,
-            oh_labels=self.is_train_oh, dl_type=self.dataloader,
-            train_way=self.train_way, train_shot=self.train_shot,
-            train_query=self.train_query, train_episode=self.train_episode,
-            n_fold=self.n_fold, device=self.device
-        )
-        def _run(train_dl: Optional[FewShotDataLoader | GraphDataLoader]=None) -> None:
-            self.meta_model.train()
-            train_accs, train_final_losses, train_total_losses = [], [], []
-
-            self.logger.debug("Training Phase")
-
-            for i, data in enumerate(tqdm(train_dl)):
-                support_data_list, query_data_list = None, None
-
-                if not self.paper:
-                    support_data, support_data_list, query_data, query_data_list = data
-                else:
-                    support_data, query_data, _ = data
-                
-                self._meta_train_step(
-                    support_data=support_data, query_data=query_data,
-                    train_accs=train_accs, train_total_losses=train_total_losses,
-                    train_final_losses=train_final_losses, loop_counter=i,
-                    support_data_list=support_data_list, query_data_list=query_data_list
-                )
-            
-            self.logger.debug("Ended Training Phase")
-
-            return train_accs, train_final_losses, train_total_losses
-        
-        return _run(train_dataloader)
-
-    def _base_train(self) -> Tuple[List[float], List[float], List[float]]:
-        """Run the basic training"""
-        train_dataloader = None
-        criterion = nn.CrossEntropyLoss() if not self.is_train_oh else OHECrossEntropy()
-        optimizer = optim.Adam(self.model.parameters(), lr=self.outer_lr, weight_decay=config.WEIGHT_DECAY)
-        scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode='min', factor=0.5, patience=self.patience, verbose=True, min_lr=1e-5
-        )
-
-        @KFoldCrossValidationWrapper.kFold_validation(
-            trainer=self, logger=self.logger,
-            loss=self.meta_model.loss, use=self.use_mevolve,
-            oh_labels=self.is_train_oh, dl_type=self.dataloader,
-            train_way=self.train_way, train_shot=self.train_shot,
-            train_query=self.train_query, train_episode=self.train_episode,
-            n_fold=self.n_fold, device=self.device
-        )
-        def _run(train_dl: Optional[FewShotDataLoader | GraphDataLoader]=None) -> None:
-            self.meta_model.train()
-            train_accs, train_final_losses, train_total_losses = [], [], []
-
-            self.logger.debug("Training Phase")
-
-            for i, data in enumerate(tqdm(train_dl)):
-                data_train, _ = data
-                self._train_step(
-                    data=data_train, train_accs=train_accs, train_final_losses=train_final_losses,
-                    train_total_losses=train_total_losses, loop_counter=i,
-                    criterion=criterion, optimizer=optimizer
-                )
-
-            scheduler.step()
-            
-            self.logger.debug("Ended Training Phase")
-
-            return train_accs, train_final_losses, train_total_losses
-
-        return _run(train_dataloader)
-
-    def _train(self) -> Tuple[List[float], List[float], List[float]]:
-        """Run the training steps"""
-        if self.meta_model is not None:
-            return self._meta_train()
-        
-        return self._base_train()
-
-    def _val_step(self, support_data : pyg_data.Data,
-                        val_accs     : List[float],
-                        query_data   : Optional[pyg_data.Data]=None
-    ) -> None:
-        """Run validation step"""
-        if self.device != "cpu":
-            support_data = support_data.pin_memory()
             support_data = support_data.to(self.device)
+            query_data = query_data.to(self.device)
 
-        # If both support_data and query_data are given
-        # then we have to run the finetuning of the meta model
-        # otherwise, if only support_data is not None then
-        # this means that we have to run a simple validation step
-        if query_data is not None:
-            if self.device != "cpu":
-                query_data = query_data.pin_memory()
-                query_data = query_data.to(self.device)
+        accs, step, _, _, query_losses = self.meta.finetuning(support_data, query_data)
+        return accs, step, query_losses
 
-            accs, step, _, _, _ = self.meta_model.finetuning(support_data, query_data)
+    def _meta_validation(self, epoch: int=0) -> List[float]:
+        """ Run the validation phase """
+        print("Starting Validation Phase", file=sys.stdout if not self.file_log else open(
+            self.logger.handlers[1].baseFilename, mode="a"
+        ))
+
+        # Set validation mode
+        self.meta.eval()
+
+        val_accs = []
+        for i, data in enumerate(tqdm(self.validation_dl(epoch)), 1):
+            support_data, _, query_data, _ = data
+            accs, step, _ = self._validation_step(support_data, query_data)
             val_accs.append(accs[step])
 
-            return None
-    
-        logits, _, _ = self.model(support_data.x, support_data.edge_index, support_data.batch)
-        preds = F.softmax(logits, dim=1).argmax(dim=1)
-        val_accs.append(compute_accuracy(preds, support_data.y, self.is_validation_oh))
-
-        return None
-
-    def _validation(self) -> List[float]:
-        """Run the validation phase"""
-        val_accs = []
-        self.logger.debug("Validation Phase")
-        model2use = self.meta_model if self.meta_model is not None else self.model
-        model2use.eval()
-
-        for _, data in enumerate(tqdm(self.validation_dl)):
-            if self.meta_model is not None:
-                if not self.paper:
-                    support_data, _, query_data, _ = data
-                else:
-                    support_data, query_data, _ = data
-                    
-                self._val_step(support_data, val_accs, query_data)
-                continue
-        
-            val_data, _ = data
-            self._val_step(val_data, val_accs)
-        
-        self.logger.debug("Ended Validation Phase")
+        print("Ended Validation Phase", file=sys.stdout if not self.file_log else open(
+            self.logger.handlers[1].baseFilename, mode="a"
+        ))
         return val_accs
-    
-    def _train_run(self) -> None:
-        """Run the entire training"""
+
+    def _train(self, epoch: int=0)
+
+    def _run(self) -> None:
+        """ Run training and validation """
         max_val_acc = 0.0
-        print("=" * 40 + " Starting Optimization " + "=" * 40)
-        self.logger.debug("Starting Optimization")
+        self.logger.debug("Starting optimization")
 
         for epoch in range(self.epochs):
-            print("=" * 103)
             print("=" * 103, file=sys.stdout if not self.file_log else open(
                     self.logger.handlers[1].baseFilename, mode="a"
                 )
             )
 
-            train_dataloader = deepcopy(self.train_dl)
-            self.train_dl = self.train_dl(epoch)
+            print("Epoch Number {:04d}".format(epoch), file=sys.stdout if not self.file_log else open(
+                    self.logger.handlers[1].baseFilename, mode="a"
+                )
+            )
 
-            validation_dataloader = deepcopy(self.validation_dl)
-            self.validation_dl = self.validation_dl(epoch)
-
-            self.logger.debug("Epoch Number {:04d}".format(epoch))
-            print("Epoch Number {:04d}".format(epoch))
-
-            train_accs, train_final_losses, _ = self._train()
-            val_accs = self._validation()
-
-            self.validation_dl = validation_dataloader
-            self.train_dl = train_dataloader
+            if self.meta is not None:
+                train_accs, train_final_losses, _ = self._meta_train()
+                val_accs = self._meta_validation()
+            else:
+                train_accs, train_final_losses, _ = self._train()
+                val_accs = self._validation()
 
             val_acc_avg = np.mean(val_accs)
             train_acc_avg = np.mean(train_accs)
             train_loss_avg = np.mean(train_final_losses)
             val_acc_ci95 = 1.96 * np.std(np.array(val_accs)) / np.sqrt(self.val_episode)
+            printable_str = ""
 
             if val_acc_avg > max_val_acc:
                 max_val_acc = val_acc_avg
-                printable_string = "Epoch(***Best***) {:04d}\n".format(epoch)
+                printable_str = "Epoch(*** Best ***) {:04d}\n".format(epoch)
 
-                torch.save({'epoch': epoch, 'embedding': self.model2save.state_dict()
-                    }, os.path.join(
-                        self.save_path, 
-                        f'{self.data_name}_{self.save_suffix}BestModel.pth'
-                    )
+                torch.save({'epoch' : epoch, 'embedding' : self.model2save.state_dict()
+                    }, os.path.join(self.save_path, self.save_string)
                 )
-            else :
-                printable_string = "Epoch {:04d}\n".format(epoch)
-            
-            printable_string += (
+
+            else:
+                printable_str = "Epoch {:04d}\n".format(epoch)
+
+            printable_str += (
                 "\tAvg Train Loss: {:.6f}, Avg Train Accuracy: {:.6f}\n" +
                 "\tAvg Validation Accuracy: {:.2f} ±{:.26f}\n" +
+                "\tLearning Rate: {}\n" +
                 "\tBest Current Validation Accuracy: {:.2f}").format(
                     train_loss_avg, train_acc_avg,
-                    val_acc_avg, val_acc_ci95, max_val_acc
+                    val_acc_avg, val_acc_ci95, 
+                    self.meta.get_meta_learning_rate() if self.meta is not None else 0.0, 
+                    max_val_acc
                 )
 
-            print(printable_string, file=sys.stdout if not self.file_log else open(
+            print(printable_str, file=sys.stdout if not self.file_log else open(
                     self.logger.handlers[1].baseFilename, mode="a"
                 )
             )
@@ -463,32 +377,9 @@ class Trainer:
             if self.meta_model:
                 self.meta_model.adapt_meta_learning_rate(train_loss_avg)
 
-        self.logger.debug("Optimization Finished")
-        print("Optimization Finished")
-    
+        self.logger.debug("Optimization finished")
+
     @elapsed_time
     def run(self) -> None:
-        """Run the entire optimization (train + validation)"""
-        # If use_mevolve is set to True then we need to invoke the MEvolve class
-        if self.use_mevolve:
-            me = MEvolveGDA(
-                trainer=self, n_iters=self.iters,
-                logger=self.logger, train_ds=self.train_ds,
-                validation_ds=self.validation_ds,
-                threshold_beta=self.lrtb, threshold_steps=self.lrts,
-                heuristic=self.heuristic
-            )
-
-            _ = me.evolve()
-
-            return None
-        
-        if self.use_gmixup:
-            # TODO: Implement also G-Mixup optimization
-            # Idea: implement a __new__ method for the trainer
-            # given as input the trainer itself, but using
-            # one-hot encoded labels.
-            return None
-        
-        self._train_run()
-        return None
+        """ Run the entire optimization """
+        self._run()
