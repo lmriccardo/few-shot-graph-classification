@@ -674,6 +674,56 @@ def data_batch_collate(data_list: List[gdata.Data], oh_labels: bool=False) -> Tu
     return data_batch, data_list
 
 
+def data_batch_collate_edge_renamed(data: List[gdata.Data], oh_labels: bool=False) -> gdata.Data:
+    """
+    Given a list of data whose egdes have been renamed previously,
+    i.e., nodes goes from 0 to #Nodes, create a new single data
+    merging those ones from the list.
+
+    :param data: a list of torch_geometric.data.Data
+    :param oh_labels: True if labels are one hot encoded, False otherwise
+    :return: a single data obtained by merging each data in the list
+    """
+    # Take the first data and find the maximum node
+    max_node_number = data[0].edge_index.flatten().max().item() + 1
+    current_edge_index = deepcopy(data[0].edge_index)
+    current_x = deepcopy(data[0].x)
+    current_labels = deepcopy(data[0].y)
+    current_batch = data[0].batch
+    max_batch_number = current_batch.max().item()
+
+    # Iterate through the entire list starting from the second element
+    for i_data, data_el in enumerate(data, 1):
+        current_x = torch.vstack((current_x, data_el.x))
+        stack_f = torch.hstack if not oh_labels else torch.vstack
+        current_labels = stack_f((current_labels, data_el.y))
+        current_batch = torch.hstack((current_batch, data_el.batch + max_batch_number + 1))
+
+        # Now we have to rename the edges.
+        # First let's take the nodes of the graph
+        nodes_idxs = data_el.edge_index.flatten().unique(sorted=True).tolist()
+        nodes_mapping = dict(zip(nodes_idxs, range(max_node_number, max_node_number + len(nodes_idxs))))
+        rerenamed_edges = torch.tensor(
+            list(
+                map(
+                    lambda x: nodes_mapping[x],
+                    data_el.edge_index.flatten().tolist()
+                )
+            )
+        ).view(2, -1)
+
+        current_edge_index = torch.hstack((current_edge_index, rerenamed_edges))
+
+        # Update the counter for the max node number and the batch number
+        max_node_number += len(nodes_idxs)
+        max_batch_number = data_el.batch.max().item() + max_batch_number + 1
+
+    return gdata.Data(
+        x=current_x, edge_index=current_edge_index, 
+        y=current_labels, batch=current_batch,
+        old_classes_mapping=data[0].old_classes_mapping
+    )
+
 def task_sampler_uncollate(task_sampler: 'TaskBatchSampler', 
                            data_batch  : List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]] ) -> Tuple[
     List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]], List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]
@@ -821,7 +871,7 @@ def to_datadict(data: Union[gdata.Data, List[gdata.Data]]) -> Dict[str,Any]:
         }, label)
 
     return graphs
-    
+
 
 #######################################################
 ################## GENERAL UTILITIES ##################

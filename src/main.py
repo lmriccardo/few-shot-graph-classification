@@ -5,8 +5,8 @@ sys.path.append(os.getcwd())
 
 from data.dataset import get_dataset
 from utils.utils import configure_logger
-from utils.trainer1 import Trainer
-from algorithms.asmaml.asmaml1 import AdaptiveStepMAML
+from utils.trainer import Trainer
+from algorithms.asmaml.asmaml import AdaptiveStepMAML
 
 import argparse
 import config
@@ -23,10 +23,11 @@ def main() -> None:
     parser.add_argument('-f', '--file-log',  help="If logging to file or not",                            default=config.FILE_LOGGING, action="store_true")
     parser.add_argument('-s', '--save-path', help="The path where to save pre-trained models", type=str,  default=config.MODELS_SAVE_PATH)
     parser.add_argument('-m', '--model',     help="The name of the model (sage or gcn)",       type=str,  default=config.MODEL_NAME)
-    parser.add_argument('--not-as-maml',     help="Use AS-MAML or not",                                   default=True, action="store_false")
+    parser.add_argument('--not-as-maml',     help="Use AS-MAML or not",                                   default=True,  action="store_false")
     parser.add_argument('--gmixup',          help="Use G-Mixup or not",                                   default=False, action="store_true")
     parser.add_argument('--flag',            help="Use FLAG or not",                                      default=False, action="store_true")
     parser.add_argument('--mevolve',         help="Use M-Evolve or not",                                  default=False, action="store_true")
+    parser.add_argument('--use-pretrained',  help="Use the pre-trained model or not",                     default=False, action="store_true")
 
     # Configurations for the AS-MAML Model
     parser.add_argument('--batch-size',    help="Dimension of a batch",                            type=int,   default=1)
@@ -112,12 +113,13 @@ def main() -> None:
         "lrts"          : args.lrts,
         "lrtb"          : args.lrtb,
         "flag_m"        : args.flag_m,
-        "ass"           : args.ass
+        "ass"           : args.ass,
+        "use_exist"     : args.use_pretrained
     }
 
 
     logger = configure_logger(file_logging=configs["file_log"], logging_path=configs["log_path"])
-    dataset_name = configs["data_name"]
+    dataset_name = configs["dataset_name"]
     train_ds, test_ds, val_ds, _ = get_dataset(
         download=False, 
         data_dir=configs["data_path"], 
@@ -174,7 +176,6 @@ def main() -> None:
 
     print(configurations, file=sys.stdout if not configs["file_log"] else open(logger.handlers[1].baseFilename, mode="a"))
 
-    # TODO: Set to use the pre-trained model
     # Run the trainer
     meta_model = AdaptiveStepMAML if configs["use_asmaml"] else None
     save_suffix = "ASMAML_" if configs["use_asmaml"] else "_"

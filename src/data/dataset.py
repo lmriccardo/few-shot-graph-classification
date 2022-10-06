@@ -89,7 +89,7 @@ class GraphDataset(Dataset):
         """Return a description of the dataset"""
         return f"{self.__class__.__name__}(classes={set(self.classes)},n_graphs={self.__len__()})"
 
-    def __add__(self, other: Union['GraphDataset', List[Tuple[Dict[str, Any], str]]]) -> 'GraphDataset':
+    def __add__(self, other: Union['GraphDataset', Dict[int, Tuple[Dict[str, Any], str]]]) -> 'GraphDataset':
         """Create a new graph dataset as the sum of the current and the input given dataset"""
         last_id = self.__len__() + 1
         if isinstance(other, GraphDataset):

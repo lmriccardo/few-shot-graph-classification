@@ -5,14 +5,16 @@ import torch.nn.functional as F
 import torch_geometric.data as pyg_data
 import numpy as np
 
+from torch.nn.modules.loss import _Loss, _WeightedLoss
 from algorithms.asmaml.asmaml import AdaptiveStepMAML
+from algorithms.mevolve.mevolve import MEvolveGDA
 from algorithms.gmixup.gmixup import OHECrossEntropy
 from models.sage4maml import SAGE4MAML
 from models.gcn4maml import GCN4MAML
 from data.dataset import GraphDataset, OHGraphDataset
 from data.dataloader import get_dataloader, FewShotDataLoader, GraphDataLoader
-from utils.utils import elapsed_time
-from typing import Tuple, List, Optional, Any
+from utils.utils import elapsed_time, compute_accuracy, data_batch_collate_edge_renamed
+from typing import Tuple, List, Optional, Any, final
 from tqdm import tqdm
 
 import config
@@ -90,7 +92,7 @@ class Trainer(object):
         schs: int=config.STOP_CONTROL_HIDDEN_SIZE, beta: float=config.BETA, n_fold: int=config.N_FOLD, 
         n_xval: int=config.N_CROSSVALIDATION, iters: int=config.ITERATIONS, heuristic: str=config.HEURISTIC,
         lrts: int=config.LABEL_REL_THRESHOLD_STEPS, lrtb: int=config.LABEL_REL_THRESHOLD_BETA,
-        flag_m: int=config.M, ass: float=config.ATTACK_STEP_SIZE, file_log: bool=False, **kwargs
+        flag_m: int=config.M, ass: float=config.ATTACK_STEP_SIZE, file_log: bool=False, use_exists: bool=False, **kwargs
     ) -> None:
         # .
         self.train_ds      = train_ds
@@ -138,6 +140,7 @@ class Trainer(object):
         self.flag_m        = flag_m
         self.ass           = ass
         self.file_log      = file_log
+        self.use_exists    = use_exists
 
         self.shuffle = True
 
@@ -158,6 +161,22 @@ class Trainer(object):
             self.meta = self._get_meta()
 
         self.save_string = self._build_save_string()
+
+        # Load pre-trained if use_exists is True
+        if self.use_exists:
+            self._load_pretrained()
+
+    def _load_pretrained(self) -> None:
+        """ Load pre-trained model """
+        self.logger.debug("Detected True for pre-trained model loading")
+
+        saved_data = torch.load(os.path.join(self.save_path, self.save_string))
+
+        if self.meta_model is not None:
+            self.meta.load_state_dict(saved_data["embedding"]) # Load meta
+            return
+        
+        self.model.load_state_dict(saved_data["embedding"]) # Load non-meta
 
     def _build_save_string(self) -> str:
         """ Return the name of the file where to save the model """
@@ -248,6 +267,8 @@ class Trainer(object):
 
         return meta
 
+    ############################################## META OPTIMIZATION SECTION ##############################################
+
     def _meta_train_step(self, support_data: pyg_data.Data, query_data: pyg_data.Data) -> Any:
         """ Run a single train step """
         if self.device != "cpu":
@@ -277,7 +298,7 @@ class Trainer(object):
 
             if (i + 1) % 100 == 0:
                 print("({:d}) Mean Accuracy: {:.6f}, Mean Final Loss: {:.6f}, Mean Total Loss: {:.6f}".format(
-                    np.mean(train_accs), np.mean(train_final_losses), np.mean(train_total_losses)
+                    epoch, np.mean(train_accs), np.mean(train_final_losses), np.mean(train_total_losses)
                 ), file=sys.stdout if not self.file_log else open(
                         self.logger.handlers[1].baseFilename, mode="a"
                 ))
@@ -316,9 +337,7 @@ class Trainer(object):
         ))
         return val_accs
 
-    def _train(self, epoch: int=0)
-
-    def _run(self) -> None:
+    def _meta_run(self) -> None:
         """ Run training and validation """
         max_val_acc = 0.0
         self.logger.debug("Starting optimization")
@@ -334,12 +353,8 @@ class Trainer(object):
                 )
             )
 
-            if self.meta is not None:
-                train_accs, train_final_losses, _ = self._meta_train()
-                val_accs = self._meta_validation()
-            else:
-                train_accs, train_final_losses, _ = self._train()
-                val_accs = self._validation()
+            train_accs, train_final_losses, _ = self._meta_train(epoch)
+            val_accs = self._meta_validation(epoch)
 
             val_acc_avg = np.mean(val_accs)
             train_acc_avg = np.mean(train_accs)
@@ -363,10 +378,8 @@ class Trainer(object):
                 "\tAvg Validation Accuracy: {:.2f} ±{:.26f}\n" +
                 "\tLearning Rate: {}\n" +
                 "\tBest Current Validation Accuracy: {:.2f}").format(
-                    train_loss_avg, train_acc_avg,
-                    val_acc_avg, val_acc_ci95, 
-                    self.meta.get_meta_learning_rate() if self.meta is not None else 0.0, 
-                    max_val_acc
+                    train_loss_avg, train_acc_avg, val_acc_avg, val_acc_ci95, 
+                    self.meta.get_meta_learning_rate(), max_val_acc
                 )
 
             print(printable_str, file=sys.stdout if not self.file_log else open(
@@ -374,12 +387,202 @@ class Trainer(object):
                 )
             )
 
-            if self.meta_model:
-                self.meta_model.adapt_meta_learning_rate(train_loss_avg)
+            self.meta_model.adapt_meta_learning_rate(train_loss_avg)
 
         self.logger.debug("Optimization finished")
+
+    ############################################## NON-META OPTIMIZATION SECTION ##############################################
+
+    def _train_step(self, support_data: pyg_data.Data, query_data: pyg_data.Data,
+                    optimizer: optim.Optimizer, criterion: _Loss | _WeightedLoss
+    ) -> Any:
+        """ Run one step of non-meta training. In this case we would like to use
+            as always the few-shot way. For this end, I decided to use the support set
+            to compute the loss and update the optimizer, instead the query set has
+            been used to compute the accuracy and update the optimizer as well
+        """
+        if self.device != "cpu":
+            support_data = support_data.to(self.device)
+            query_data = query_data.to(self.device)
+
+        optimizer.zero_grad()
+
+        # First use the support set
+        support_logits, _, _ = self.model(support_data.x, support_data.edge_index, support_data.batch)
+        support_loss = criterion(support_logits, support_data.y)
+        support_loss.backward()
+        optimizer.step()
+
+        # Compute performances on the query set
+        query_logits, _, _ = self.model(query_data.x, query_data.edge_index, query_data.batch)
+        query_loss = criterion(query_logits, query_data.y)
+
+        with torch.no_grad():
+            preds = F.softmax(query_logits, dim=1).argmax(dim=1)
+            query_acc = compute_accuracy(preds, query_data.y, self.is_oh_train)
+        
+        return query_acc, query_loss, query_loss + support_loss
+
+    def _train(self, optimizer: optim.Optimizer,
+                     criterion: _Loss | _WeightedLoss, 
+                     epoch    : int=0
+    ) -> Tuple[List[float], List[float], List[float]]:
+        """ Run the non meta training """
+        print("Starting Training phase", file=sys.stdout if not self.file_log else open(
+            self.logger.handlers[1].baseFilename, mode="a"
+        ))
+
+        self.model.train()
+
+        train_accs, train_final_losses, train_total_losses = [], [], []
+        for i, data in enumerate(tqdm(self.train_dl(epoch)), 1):
+            support_data, _, query_data, _ = data
+            acc, final_loss, total_loss = self._train_step(
+                support_data, query_data, optimizer, criterion
+            )
+
+            final_loss = final_loss.detach()
+            total_loss = total_loss.detach()
+
+            train_accs.append(acc)
+            train_final_losses.append(final_loss)
+            train_total_losses.append(total_loss)
+
+            if (i + 1) % 100 == 0:
+                print("({:d}) Mean Accuracy: {:.6f}, Mean Final Loss: {:.6f}, Mean Total Loss: {:.6f}".format(
+                    epoch, np.mean(train_accs), np.mean(train_final_losses), np.mean(train_total_losses)
+                ), file=sys.stdout if not self.file_log else open(
+                        self.logger.handlers[1].baseFilename, mode="a"
+                ))
+
+        print("Ended Training Phase", file=sys.stdout if not self.file_log else open(
+            self.logger.handlers[1].baseFilename, mode="a"
+        ))
+
+        return train_accs, train_final_losses, train_total_losses
+    
+    def _validation_step(self, support_data: pyg_data.Data, query_data  : pyg_data.Data) -> float:
+        """ Run a single non-meta validation step """
+        # First merge support and query set
+        merged_data = data_batch_collate_edge_renamed([support_data, query_data], self.is_oh_validation)
+
+        # Send the data to the GPU if necessary
+        if self.device != "cpu":
+            merged_data = merged_data.to(self.device)
+        
+        # Compute the accuracy
+        logits, _, _ = self.model(merged_data.x, merged_data.edge_index, merged_data.batch)
+        with torch.no_grad():
+            preds = F.softmax(logits, dim=1).argmax(dim=1)
+            acc = compute_accuracy(preds, merged_data.y, self.is_oh_validation)
+
+        return acc
+
+    def _validation(self, epoch: int=0) -> List[float]:
+        """ Run the non-meta Validation """
+        print("Starting Validation Phase", file=sys.stdout if not self.file_log else open(
+            self.logger.handlers[1].baseFilename, mode="a"
+        ))
+
+        # Set validation phase
+        self.model.eval()
+
+        val_accs = []
+        for _, data in enumerate(tqdm(self.validation_dl(epoch)), 1):
+            support_data, _, query_data, _ = data
+            acc = self._validation_step(support_data, query_data)
+            val_accs.append(acc)
+        
+        return val_accs
+
+    def _run(self) -> None:
+        """ Run the non-meta optimization """
+        criterion = nn.CrossEntropyLoss() if not self.is_oh_train else OHECrossEntropy()
+        optimizer = optim.Adam(self.model.parameters(), lr=self.outer_lr, weight_decay=self.weight_decay)
+        lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode="min", factor=0.5, 
+            patience=self.patience, verbose=True, min_lr=1e-05
+        )
+
+        # If use_exists is True we need to load pre-trained info for the optimizer
+        if self.use_exists:
+            saved_data = torch.load(os.path.join(self.save_path, self.save_string))
+            optimizer.load_state_dict(saved_data["optimizer"])
+
+        max_val_acc = 0.0
+        self.logger.debug("Starting non-meta Optimization")
+
+        for epoch in range(self.epochs):
+            print("=" * 103, file=sys.stdout if not self.file_log else open(
+                    self.logger.handlers[1].baseFilename, mode="a"
+                )
+            )
+
+            print("Epoch Number {:04d}".format(epoch), file=sys.stdout if not self.file_log else open(
+                    self.logger.handlers[1].baseFilename, mode="a"
+                )
+            )
+
+            train_accs, train_final_losses, _ = self._train(optimizer, criterion, epoch)
+            val_accs = self._validation(epoch)
+
+            val_acc_avg = np.mean(val_accs)
+            train_acc_avg = np.mean(train_accs)
+            train_loss_avg = np.mean(train_final_losses)
+            val_acc_ci95 = 1.96 * np.std(np.array(val_accs)) / np.sqrt(self.val_episode)
+            printable_str = ""
+
+            if val_acc_avg > max_val_acc:
+                max_val_acc = val_acc_avg
+                printable_str = "Epoch(*** Best ***) {:04d}\n".format(epoch)
+
+                torch.save(
+                    {
+                        'epoch' : epoch, 
+                        'embedding' : self.model2save.state_dict(), 
+                        'optimizer' : optimizer.state_dict()
+                    }, 
+                    os.path.join(self.save_path, self.save_string)
+                )
+
+            else:
+                printable_str = "Epoch {:04d}\n".format(epoch)
+
+            printable_str += (
+                "\tAvg Train Loss: {:.6f}, Avg Train Accuracy: {:.6f}\n" +
+                "\tAvg Validation Accuracy: {:.2f} ±{:.26f}\n" +
+                "\tLearning Rate: {}\n" +
+                "\tBest Current Validation Accuracy: {:.2f}").format(
+                    train_loss_avg, train_acc_avg, val_acc_avg, val_acc_ci95, 
+                    optimizer.state_dict()["param_groups"][0]["lr"], max_val_acc
+                )
+
+            print(printable_str, file=sys.stdout if not self.file_log else open(
+                    self.logger.handlers[1].baseFilename, mode="a"
+                )
+            )
+
+            lr_scheduler.step(train_loss_avg)
 
     @elapsed_time
     def run(self) -> None:
         """ Run the entire optimization """
+        # If use_mevolve is set to True then we need to invoke the MEvolve class
+        if self.use_mevolve:
+            me = MEvolveGDA(
+                trainer=self, n_iters=self.iters,
+                logger=self.logger, train_ds=self.train_ds,
+                validation_ds=self.validation_ds,
+                threshold_beta=self.lrtb, threshold_steps=self.lrts,
+                heuristic=self.heuristic
+            )
+
+            _ = me.evolve()
+
+            return
+
+        if self.meta is not None:
+            self._meta_run()
+            return
+        
         self._run()

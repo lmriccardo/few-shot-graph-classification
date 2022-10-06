@@ -8,7 +8,7 @@ from data.sampler import TaskBatchSampler
 from data.dataset import GraphDataset, OHGraphDataset
 from utils.utils import setup_seed, data_batch_collate, rename_edge_indexes
 from config import T
-from typing import Tuple, List, Generic, Optional
+from typing import Tuple, List, Generic, Optional, Dict
 from functools import partial
 from collections.abc import Iterable
 
@@ -72,7 +72,7 @@ class FewShotDataLoader(object):
         return tb_sampler
 
     def _collate_graphdata(self, graph_ids: List[int]) -> Tuple[
-            torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, List[pyg_data.Data]
+            torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, List[pyg_data.Data], Dict[int, int]
     ]:
         """
         Rename and mix edges, nodes and labels of different graphs
@@ -129,7 +129,7 @@ class FewShotDataLoader(object):
         
         return (
             node_attributes, edge_indices, torch.Tensor(labels).long(),
-            torch.tensor(graph_indicator), data_list
+            torch.tensor(graph_indicator), data_list, label_mapping
         )
 
 
@@ -142,18 +142,18 @@ class FewShotDataLoader(object):
 
         # 2. Get support graph data
         support_data = self._collate_graphdata(support_ids)
-        support_na, support_ei, support_y, support_gi, support_dl = support_data
+        support_na, support_ei, support_y, support_gi, support_dl, support_lbl_map = support_data
         support_data = pyg_data.Data(
             x=support_na, edge_index=support_ei,
-            y=support_y, batch=support_gi
+            y=support_y, batch=support_gi, old_classes_mapping=support_lbl_map
         )
 
         # 3. Get query graph data
         query_data = self._collate_graphdata(query_ids)
-        query_na, query_ei, query_y, query_gi, query_dl = query_data
+        query_na, query_ei, query_y, query_gi, query_dl, query_lbl_map = query_data
         query_data = pyg_data.Data(
             x=query_na, edge_index=query_ei,
-            y=query_y, batch=query_gi
+            y=query_y, batch=query_gi, old_classes_mapping=query_lbl_map
         )
 
         return support_data, support_dl, query_data, query_dl

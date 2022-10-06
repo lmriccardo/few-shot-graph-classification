@@ -6,12 +6,11 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torch_geometric.data import Data
 
-from data.dataset import GraphDataset, augment_dataset
+from data.dataset import GraphDataset, augment_dataset, split_dataset
 from data.dataloader import GraphDataLoader
 from utils.utils import rename_edge_indexes, to_pygdata
 from typing import Dict, List, Tuple, Any
 
-import networkx as nx
 import logging
 import random
 
@@ -137,7 +136,7 @@ class MEvolveGDA:
                        theta                   : torch.Tensor,
                        decay                   : float,
                        threshold_beta          : float,
-                       threshold_steps         : int) -> List[Tuple[Dict[str, Any], str]]:
+                       threshold_steps         : int) -> Dict[int, Tuple[Dict[str, Any], str]]:
         """
         After applying the heuristic for data augmentation, we have a
         bunch of new graphs and respective labels that needs to be
@@ -148,7 +147,6 @@ class MEvolveGDA:
         :param validation_ds: the validation dataset
         :param classes: the list of targets label
         :param classifier_model: the classifier
-        :param logger: a simple logger
         :param augmented_data: the new data generated from the train set
         :param data_list: a list of graphs
         :param graph_probability_vector: a dictionary mapping for each graph the
@@ -191,7 +189,8 @@ class MEvolveGDA:
         print(f"Computed new label reliability threshold to {label_rel_threshold}")
 
         # Filter data
-        filtered_data = []
+        filtered_data = dict()
+        counter = 0
         for graph, target in augmented_data:
             geotorch_data = rename_edge_indexes([to_pygdata(graph, target)])[0]
             geotorch_data.batch = torch.tensor([0] * geotorch_data.x.shape[0])
@@ -200,7 +199,8 @@ class MEvolveGDA:
             choices = sorted([classes_mapping[target]] + sample_classes)
             r = prob_vector[0] @ confusion_matrix[classes_mapping[target], choices]
             if r > label_rel_threshold:
-                filtered_data.append((graph, target))
+                filtered_data[counter] = (graph, target)
+                counter += 1
         
         return filtered_data
     
@@ -233,6 +233,12 @@ class MEvolveGDA:
         print(f"USING HEURISTIC - {self.heuristic}")
         print("==========================================================")
 
+        # For M-Evolve we need the train set and the validation set
+        # sharing the same class space. For this reason I have decided
+        # first to the merge the two dataset and then split them 
+        # another time into train and validation set that satisfy this constraint
+        self.train_ds, self.validation_ds = split_dataset(self.train_ds + self.validation_ds)
+
         while current_iteration < self.n_iters:
             print(f"MODEL-EVOLUTION ITERATION NUMBER: {current_iteration}/{self.n_iters}")
 
@@ -252,18 +258,19 @@ class MEvolveGDA:
             filtered_data = self.data_filtering(
                 self.validation_ds, prob_matrix, validation_data_list, 
                 self.validation_ds.classes, self.pre_trained_model,
-                self.logger, d_pool, lr, theta, decay, self.threshold_beta, self.threshold_steps
+                d_pool, lr, theta, decay, self.threshold_beta, self.threshold_steps
             )
 
             print(f"Number of new generated data: {len(filtered_data)}")
 
             # 4. Change the current train dataset of the trainer
             self.train_ds = self.train_ds + filtered_data
-            self.trainer.train_dl, self.trainer.val_dl = self.trainer.get_dataloaders()
+            self.trainer.train_dl, self.trainer.val_dl = self.trainer._get_dataloaders()
 
             print(f"The new training set has dimension: {len(self.train_ds)}")
 
             # 5. Re run the trainer
+            self.trainer.use_mevolve = False
             self.trainer.run()
 
             # 6. Increment the iteration counter
