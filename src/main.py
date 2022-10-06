@@ -6,6 +6,7 @@ sys.path.append(os.getcwd())
 from data.dataset import get_dataset
 from utils.utils import configure_logger
 from utils.trainer import Trainer
+from utils.tester import test
 from algorithms.asmaml.asmaml import AdaptiveStepMAML
 
 import argparse
@@ -23,6 +24,7 @@ def main() -> None:
     parser.add_argument('-f', '--file-log',  help="If logging to file or not",                            default=config.FILE_LOGGING, action="store_true")
     parser.add_argument('-s', '--save-path', help="The path where to save pre-trained models", type=str,  default=config.MODELS_SAVE_PATH)
     parser.add_argument('-m', '--model',     help="The name of the model (sage or gcn)",       type=str,  default=config.MODEL_NAME)
+    parser.add_argument('--test',            help="The pre-trained model to test",             type=str,  default="")
     parser.add_argument('--not-as-maml',     help="Use AS-MAML or not",                                   default=True,  action="store_false")
     parser.add_argument('--gmixup',          help="Use G-Mixup or not",                                   default=False, action="store_true")
     parser.add_argument('--flag',            help="Use FLAG or not",                                      default=False, action="store_true")
@@ -70,6 +72,8 @@ def main() -> None:
     args = parser.parse_args()
     assert args.model in ["sage", "gcn"], f"Model name: {args.model} has not been implemented yet"
     assert sum([args.mevolve, args.flag, args.gmixup]) < 2, "Cannot use more than one GDA technique at the same time"
+    assert args.test == "" or os.path.exists(os.path.abspath(args.test)), \
+        f"The pre-trained model to test, {args.test}, does not exists"
 
     configs = {
         "data_path"     : args.path,
@@ -120,7 +124,79 @@ def main() -> None:
 
     logger = configure_logger(file_logging=configs["file_log"], logging_path=configs["log_path"])
     dataset_name = configs["dataset_name"]
-    train_ds, test_ds, val_ds, _ = get_dataset(
+
+    if args.test == "":
+        train_ds, test_ds, val_ds, _ = get_dataset(
+            download=False, 
+            data_dir=configs["data_path"], 
+            logger=logger, 
+            dataset_name=dataset_name
+        )
+
+        logger.debug("--- Datasets ---")
+        print("\n- Train: ", train_ds, file=sys.stdout if not configs["file_log"] else open(logger.handlers[1].baseFilename, mode="a"))
+        print("- Test : ", test_ds, file=sys.stdout if not configs["file_log"] else open(logger.handlers[1].baseFilename, mode="a"))
+        print("- Validation: ", val_ds, file=sys.stdout if not configs["file_log"] else open(logger.handlers[1].baseFilename, mode="a"))
+        print("\n", file=sys.stdout if not configs["file_log"] else open(logger.handlers[1].baseFilename, mode="a"))
+
+        logger.debug("--- Configuration ---")
+        configurations = ("\nDEVICE: {device}\n"                             +
+                        "DATASET NAME: {dataset_name}\n"                   + 
+                        "USE ASMAML: {use_asmaml}\n"                       +
+                        "USE_GMIXUP : {use_gmixup}\n"                      +
+                        "USE_MEVOLVE : {use_mevolve}\n"                    + 
+                        "USE_FLAG : {use_flag}\n"                          + 
+                        "TRAIN SUPPORT SIZE: {train_support_size}\n"       +
+                        "TRAIN QUERY SIZE: {train_query_size}\n"           +
+                        "VALIDATION SUPPORT SIZE: {val_support_size}\n"    +
+                        "VALIDATION QUERY SIZE: {val_query_size}\n"        +
+                        "TEST SUPPORT SIZE: {test_support_size}\n"         +
+                        "TEST QUERY SIZE: {test_query_size}\n"             +
+                        "TRAIN EPISODE: {train_episode}\n"                 +
+                        "VALIDATION EPISODE: {val_episode}\n"              +
+                        "NUMBER OF EPOCHS: {number_of_epochs}\n"           +
+                        "BATCH PER EPISODES: {batch_per_episodes}\n"       + 
+                        "NUMBER OF FOLDS : {n_folds}\n"                    +
+                        "NUMBER OF CROSS-FOLD VALIDATION RUNS: {n_xval}\n" +
+                        "M-EVOLVE ITERATIONS : {m_iters}\n"                + 
+                        "M-EVOLVE HEURISTIC : {m_heu}\n"                   +
+                        "FLAG ITERATIONS : {flag_m}\n"                     
+            ).format(
+                device=configs["device"], dataset_name=dataset_name,
+                use_asmaml=configs["use_asmaml"], use_gmixup=configs["use_gmixup"], 
+                use_flag=configs["use_flag"], use_mevolve=configs["use_mevolve"],
+                train_support_size="{} x {}".format(configs["train_way"], configs["train_shot"]),
+                train_query_size="{} x {}".format(configs["train_way"], configs["train_query"]),
+                val_support_size="{} x {}".format(configs["test_way"], configs["val_shot"]),
+                val_query_size="{} x {}".format(configs["test_way"], configs["val_query"]),
+                test_support_size="{} x {}".format(configs["test_way"], configs["val_shot"]),
+                test_query_size="{} x {}".format(configs["test_way"], configs["val_query"]),
+                train_episode=configs["train_episode"], val_episode=configs["val_episode"],
+                number_of_epochs=configs["epochs"], batch_per_episodes=configs["batch_episode"],
+                n_folds=configs["n_fold"] if configs["use_mevolve"] else "M-Evolve not used",
+                n_xval=configs["n_xval"] if configs["use_mevolve"] else "M-Evolve not used",
+                m_iters=configs["iters"] if configs["use_mevolve"] else "M-Evolve not used",
+                m_heu=configs["heuristic"] if configs["use_mevolve"] else "M-Evolve not used",
+                flag_m=configs["falg_m"] if configs["use_flag"] else "FLAG not used"
+        )
+
+        print(configurations, file=sys.stdout if not configs["file_log"] else open(logger.handlers[1].baseFilename, mode="a"))
+
+        # Run the trainer
+        meta_model = AdaptiveStepMAML if configs["use_asmaml"] else None
+        save_suffix = "ASMAML_" if configs["use_asmaml"] else "_"
+
+        optimizer = Trainer(
+            train_ds=train_ds, val_ds=val_ds, logger=logger, 
+            meta_model=meta_model, save_suffix=save_suffix,
+            **configs
+        )
+
+        optimizer.run()
+        
+        return
+
+    _, test_ds, _, _ = get_dataset(
         download=False, 
         data_dir=configs["data_path"], 
         logger=logger, 
@@ -128,66 +204,19 @@ def main() -> None:
     )
 
     logger.debug("--- Datasets ---")
-    print("\n- Train: ", train_ds, file=sys.stdout if not configs["file_log"] else open(logger.handlers[1].baseFilename, mode="a"))
-    print("- Test : ", test_ds, file=sys.stdout if not configs["file_log"] else open(logger.handlers[1].baseFilename, mode="a"))
-    print("- Validation: ", val_ds, file=sys.stdout if not configs["file_log"] else open(logger.handlers[1].baseFilename, mode="a"))
-    print("\n", file=sys.stdout if not configs["file_log"] else open(logger.handlers[1].baseFilename, mode="a"))
+    print("Test : ", test_ds, "\n", file=sys.stdout if not configs["file_log"] else open(logger.handlers[1].baseFilename, mode="a"))
 
-    logger.debug("--- Configuration ---")
-    configurations = ("\nDEVICE: {device}\n"                             +
-                      "DATASET NAME: {dataset_name}\n"                   + 
-                      "USE ASMAML: {use_asmaml}\n"                       +
-                      "USE_GMIXUP : {use_gmixup}\n"                      +
-                      "USE_MEVOLVE : {use_mevolve}\n"                    + 
-                      "USE_FLAG : {use_flag}\n"                          + 
-                      "TRAIN SUPPORT SIZE: {train_support_size}\n"       +
-                      "TRAIN QUERY SIZE: {train_query_size}\n"           +
-                      "VALIDATION SUPPORT SIZE: {val_support_size}\n"    +
-                      "VALIDATION QUERY SIZE: {val_query_size}\n"        +
-                      "TEST SUPPORT SIZE: {test_support_size}\n"         +
-                      "TEST QUERY SIZE: {test_query_size}\n"             +
-                      "TRAIN EPISODE: {train_episode}\n"                 +
-                      "VALIDATION EPISODE: {val_episode}\n"              +
-                      "NUMBER OF EPOCHS: {number_of_epochs}\n"           +
-                      "BATCH PER EPISODES: {batch_per_episodes}\n"       + 
-                      "NUMBER OF FOLDS : {n_folds}\n"                    +
-                      "NUMBER OF CROSS-FOLD VALIDATION RUNS: {n_xval}\n" +
-                      "M-EVOLVE ITERATIONS : {m_iters}\n"                + 
-                      "M-EVOLVE HEURISTIC : {m_heu}\n"                   +
-                      "FLAG ITERATIONS : {flag_m}\n"                     
-        ).format(
-            device=configs["device"], dataset_name=dataset_name,
-            use_asmaml=configs["use_asmaml"], use_gmixup=configs["use_gmixup"], 
-            use_flag=configs["use_flag"], use_mevolve=configs["use_mevolve"],
-            train_support_size="{} x {}".format(configs["train_way"], configs["train_shot"]),
-            train_query_size="{} x {}".format(configs["train_way"], configs["train_query"]),
-            val_support_size="{} x {}".format(configs["test_way"], configs["val_shot"]),
-            val_query_size="{} x {}".format(configs["test_way"], configs["val_query"]),
-            test_support_size="{} x {}".format(configs["test_way"], configs["val_shot"]),
-            test_query_size="{} x {}".format(configs["test_way"], configs["val_query"]),
-            train_episode=configs["train_episode"], val_episode=configs["val_episode"],
-            number_of_epochs=configs["epochs"], batch_per_episodes=configs["batch_episode"],
-            n_folds=configs["n_fold"] if configs["use_mevolve"] else "M-Evolve not used",
-            n_xval=configs["n_xval"] if configs["use_mevolve"] else "M-Evolve not used",
-            m_iters=configs["iters"] if configs["use_mevolve"] else "M-Evolve not used",
-            m_heu=configs["heuristic"] if configs["use_mevolve"] else "M-Evolve not used",
-            flag_m=configs["falg_m"] if configs["use_flag"] else "FLAG not used"
-    )
-
-    print(configurations, file=sys.stdout if not configs["file_log"] else open(logger.handlers[1].baseFilename, mode="a"))
-
-    # Run the trainer
     meta_model = AdaptiveStepMAML if configs["use_asmaml"] else None
-    save_suffix = "ASMAML_" if configs["use_asmaml"] else "_"
 
-    optimizer = Trainer(
-        train_ds=train_ds, val_ds=val_ds, logger=logger, 
-        meta_model=meta_model, save_suffix=save_suffix,
-        **configs
+    test(test_ds, logger, pre_trained_model=os.path.abspath(args.test), n_way=configs["test_way"],
+         k_shot=configs["val_shot"], n_query=configs["val_query"], episodes=configs["val_episode"],
+         shuffle=True, batch_size=configs["batch_size"], model_name=configs["model_name"], meta=meta_model,
+         dataset_name=dataset_name, device=configs["device"], inner_lr=configs["inner_lr"],
+         grad_clip=configs["grad_clip"], min_step=configs["min_step"], batch_episode=configs["batch_episode"],
+         max_step=configs["max_step"], penalty=configs["penalty"], outer_lr=configs["outer_lr"],
+         stop_lr=configs["stop_lr"], patience=configs["patience"], weight_decay=configs["weight_decay"],
+         scis=configs["scis"], schs=configs["schs"]
     )
-
-    optimizer.run()
-
 
 if __name__ == '__main__':
 	main()

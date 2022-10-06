@@ -13,7 +13,8 @@ from models.sage4maml import SAGE4MAML
 from models.gcn4maml import GCN4MAML
 from data.dataset import GraphDataset, OHGraphDataset
 from data.dataloader import get_dataloader, FewShotDataLoader, GraphDataLoader
-from utils.utils import elapsed_time, compute_accuracy, data_batch_collate_edge_renamed
+from utils.utils import save_with_pickle, data_batch_collate_edge_renamed
+from utils.utils import elapsed_time, compute_accuracy
 from typing import Tuple, List, Optional, Any, final
 from tqdm import tqdm
 
@@ -341,6 +342,7 @@ class Trainer(object):
         """ Run training and validation """
         max_val_acc = 0.0
         self.logger.debug("Starting optimization")
+        data = {"val_acc": [], "train_acc" : [], "train_loss" : []}
 
         for epoch in range(self.epochs):
             print("=" * 103, file=sys.stdout if not self.file_log else open(
@@ -361,6 +363,10 @@ class Trainer(object):
             train_loss_avg = np.mean(train_final_losses)
             val_acc_ci95 = 1.96 * np.std(np.array(val_accs)) / np.sqrt(self.val_episode)
             printable_str = ""
+
+            data["val_acc"].append(val_acc_avg)
+            data["train_acc"].append(train_acc_avg)
+            data["train_loss"].append(train_final_losses)
 
             if val_acc_avg > max_val_acc:
                 max_val_acc = val_acc_avg
@@ -388,6 +394,15 @@ class Trainer(object):
             )
 
             self.meta_model.adapt_meta_learning_rate(train_loss_avg)
+
+            
+            save_with_pickle(
+                os.path.join(
+                    "../results", self.save_string.replace(
+                        "_bestModel.pth", "_results.pickle"
+                    )
+                ), data
+            )
 
         self.logger.debug("Optimization finished")
 
@@ -511,6 +526,7 @@ class Trainer(object):
 
         max_val_acc = 0.0
         self.logger.debug("Starting non-meta Optimization")
+        data = {"val_acc": [], "train_acc" : [], "train_loss" : []}
 
         for epoch in range(self.epochs):
             print("=" * 103, file=sys.stdout if not self.file_log else open(
@@ -531,6 +547,10 @@ class Trainer(object):
             train_loss_avg = np.mean(train_final_losses)
             val_acc_ci95 = 1.96 * np.std(np.array(val_accs)) / np.sqrt(self.val_episode)
             printable_str = ""
+
+            data["val_acc"].append(val_acc_avg)
+            data["train_acc"].append(train_acc_avg)
+            data["train_loss"].append(train_final_losses)
 
             if val_acc_avg > max_val_acc:
                 max_val_acc = val_acc_avg
@@ -560,6 +580,14 @@ class Trainer(object):
             print(printable_str, file=sys.stdout if not self.file_log else open(
                     self.logger.handlers[1].baseFilename, mode="a"
                 )
+            )
+
+            save_with_pickle(
+                os.path.join(
+                    "../results", self.save_string.replace(
+                        "_bestModel.pth", "_results.pickle"
+                    )
+                ), data
             )
 
             lr_scheduler.step(train_loss_avg)

@@ -164,7 +164,8 @@ def setup_seed(seed=42):
 def save_with_pickle(path2save: str, content: Any) -> None:
     """Save content inside a .pickle file denoted by path2save"""
     path2save = path2save + ".pickle" if ".pickle" not in path2save else path2save
-    with open(path2save, mode="wb") as iostream:
+    mode = "wb" if os.path.exists(os.path.abspath(path2save)) else "xb"
+    with open(os.path.abspath(path2save), mode=mode) as iostream:
         pickle.dump(content, iostream)
 
 
