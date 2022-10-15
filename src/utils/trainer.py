@@ -144,6 +144,7 @@ class Trainer(object):
         self.use_exists    = use_exists
 
         self.shuffle = True
+        self.max_val_acc = 0.0
 
         # Control if the two datasets have OHE labels
         self.is_oh_train = isinstance(self.train_ds, OHGraphDataset)
@@ -340,7 +341,6 @@ class Trainer(object):
 
     def _meta_run(self) -> None:
         """ Run training and validation """
-        max_val_acc = 0.0
         self.logger.debug("Starting optimization")
         data = {"val_acc": [], "train_acc" : [], "train_loss" : []}
 
@@ -368,8 +368,8 @@ class Trainer(object):
             data["train_acc"].append(train_acc_avg)
             data["train_loss"].append(train_final_losses)
 
-            if val_acc_avg > max_val_acc:
-                max_val_acc = val_acc_avg
+            if val_acc_avg > self.max_val_acc:
+                self.max_val_acc = val_acc_avg
                 printable_str = "Epoch(*** Best ***) {:04d}\n".format(epoch)
 
                 torch.save({'epoch' : epoch, 'embedding' : self.model2save.state_dict()
@@ -385,7 +385,7 @@ class Trainer(object):
                 "\tLearning Rate: {}\n" +
                 "\tBest Current Validation Accuracy: {:.2f}").format(
                     train_loss_avg, train_acc_avg, val_acc_avg, val_acc_ci95, 
-                    self.meta.get_meta_learning_rate(), max_val_acc
+                    self.meta.get_meta_learning_rate(), self.max_val_acc
                 )
 
             print(printable_str, file=sys.stdout if not self.file_log else open(
@@ -524,7 +524,6 @@ class Trainer(object):
             saved_data = torch.load(os.path.join(self.save_path, self.save_string))
             optimizer.load_state_dict(saved_data["optimizer"])
 
-        max_val_acc = 0.0
         self.logger.debug("Starting non-meta Optimization")
         data = {"val_acc": [], "train_acc" : [], "train_loss" : []}
 
@@ -552,8 +551,8 @@ class Trainer(object):
             data["train_acc"].append(train_acc_avg)
             data["train_loss"].append(train_final_losses)
 
-            if val_acc_avg > max_val_acc:
-                max_val_acc = val_acc_avg
+            if val_acc_avg > self.max_val_acc:
+                self.max_val_acc = val_acc_avg
                 printable_str = "Epoch(*** Best ***) {:04d}\n".format(epoch)
 
                 torch.save(
@@ -574,7 +573,7 @@ class Trainer(object):
                 "\tLearning Rate: {}\n" +
                 "\tBest Current Validation Accuracy: {:.2f}").format(
                     train_loss_avg, train_acc_avg, val_acc_avg, val_acc_ci95, 
-                    optimizer.state_dict()["param_groups"][0]["lr"], max_val_acc
+                    optimizer.state_dict()["param_groups"][0]["lr"], self.max_val_acc
                 )
 
             print(printable_str, file=sys.stdout if not self.file_log else open(
