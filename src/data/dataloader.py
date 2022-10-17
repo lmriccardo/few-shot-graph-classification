@@ -111,7 +111,14 @@ class FewShotDataLoader(object):
             node_number = node_number + x.shape[0]
             node2new_nodes = dict(zip(nodes, new_nodes))
             row1 = torch.tensor(list(map(lambda x: node2new_nodes[x], row1)))
-            row2 = torch.tensor(list(map(lambda x: node2new_nodes[x], row2)))
+
+            try:
+                row2 = torch.tensor(list(map(lambda x: node2new_nodes[x], row2)))
+            except KeyError as ke:
+                import os
+                os.system(f"echo {node2new_nodes} > output.txt")
+                raise ke
+
             edge_index = torch.vstack((row1, row2))
 
             if edge_indices is None:
