@@ -520,9 +520,10 @@ class Trainer(object):
         )
 
         # If use_exists is True we need to load pre-trained info for the optimizer
-        if self.use_exists:
-            saved_data = torch.load(os.path.join(self.save_path, self.save_string))
-            optimizer.load_state_dict(saved_data["optimizer"])
+        # if self.use_exists:
+        #     model_name = f"{self.dataset_name}_{self.model_name.upper()}4MAML_bestModel.pth"
+        #     saved_data = torch.load(os.path.join(self.save_path, model_name))
+        #     optimizer.load_state_dict(saved_data["optimizer"])
 
         self.logger.debug("Starting non-meta Optimization")
         data = {"val_acc": [], "train_acc" : [], "train_loss" : []}

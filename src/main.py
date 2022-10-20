@@ -33,9 +33,9 @@ def main() -> None:
 
     # Configurations for the AS-MAML Model
     parser.add_argument('--batch-size',    help="Dimension of a batch",                            type=int,   default=1)
-    parser.add_argument('--outer_lr',      help="Initial LR for the model",                        type=float, default=config.OUTER_LR)
-    parser.add_argument('--inner_lr',      help="Initial LR for the meta model",                   type=float, default=config.INNER_LR)
-    parser.add_argument('--stop_lr',       help="Initial LR for the Stop model",                   type=float, default=config.STOP_LR)
+    parser.add_argument('--outer-lr',      help="Initial LR for the model",                        type=float, default=config.OUTER_LR)
+    parser.add_argument('--inner-lr',      help="Initial LR for the meta model",                   type=float, default=config.INNER_LR)
+    parser.add_argument('--stop-lr',       help="Initial LR for the Stop model",                   type=float, default=config.STOP_LR)
     parser.add_argument('--w-decay',       help="The Weight Decay for optimizer",                  type=float, default=config.WEIGHT_DECAY)
     parser.add_argument('--max-step',      help="The Max Step of the meta model",                  type=int,   default=config.MAX_STEP)
     parser.add_argument('--min-step',      help="The Min Step of the meta model",                  type=int,   default=config.MIN_STEP)
