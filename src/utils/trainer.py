@@ -157,6 +157,10 @@ class Trainer(object):
         self.model = self._get_model()
         self.model2save = self.model
 
+        # Load pre-trained if use_exists is True
+        if self.use_exists:
+            self._load_pretrained()
+
         # Create the meta model if required
         self.meta = None
         if self.meta_model is not None:
@@ -164,15 +168,12 @@ class Trainer(object):
 
         self.save_string = self._build_save_string()
 
-        # Load pre-trained if use_exists is True
-        if self.use_exists:
-            self._load_pretrained()
-
     def _load_pretrained(self) -> None:
         """ Load pre-trained model """
         self.logger.debug("Detected True for pre-trained model loading")
 
-        saved_data = torch.load(os.path.join(self.save_path, self.save_string))
+        model_name = f"{self.dataset_name}_{self.model_name.upper()}4MAML_bestModel.pth"
+        saved_data = torch.load(os.path.join(self.save_path, model_name))
 
         if self.meta_model is not None:
             self.meta.load_state_dict(saved_data["embedding"]) # Load meta
@@ -331,7 +332,7 @@ class Trainer(object):
         val_accs = []
         for i, data in enumerate(tqdm(self.validation_dl(epoch)), 1):
             support_data, _, query_data, _ = data
-            accs, step, _ = self._validation_step(support_data, query_data)
+            accs, step, _ = self._meta_validation_step(support_data, query_data)
             val_accs.append(accs[step])
 
         print("Ended Validation Phase", file=sys.stdout if not self.file_log else open(
@@ -393,8 +394,7 @@ class Trainer(object):
                 )
             )
 
-            self.meta_model.adapt_meta_learning_rate(train_loss_avg)
-
+            self.meta.adapt_meta_learning_rate(train_loss_avg)
             
             save_with_pickle(
                 os.path.join(

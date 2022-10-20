@@ -118,7 +118,7 @@ def main() -> None:
         "lrtb"          : args.lrtb,
         "flag_m"        : args.flag_m,
         "ass"           : args.ass,
-        "use_exist"     : args.use_pretrained
+        "use_exists"    : args.use_pretrained
     }
 
 
