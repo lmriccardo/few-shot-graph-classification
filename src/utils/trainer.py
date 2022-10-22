@@ -9,6 +9,7 @@ from torch.nn.modules.loss import _Loss, _WeightedLoss
 from algorithms.asmaml.asmaml import AdaptiveStepMAML
 from algorithms.mevolve.mevolve import MEvolveGDA
 from algorithms.gmixup.gmixup import OHECrossEntropy
+from algorithms.flag.flag import FlagGDA
 from models.sage4maml import SAGE4MAML
 from models.gcn4maml import GCN4MAML
 from data.dataset import GraphDataset, OHGraphDataset
@@ -410,33 +411,45 @@ class Trainer(object):
 
     def _train_step(self, support_data: pyg_data.Data, query_data: pyg_data.Data,
                     optimizer: optim.Optimizer, criterion: _Loss | _WeightedLoss
-    ) -> Any:
-        """ Run one step of non-meta training. In this case we would like to use
-            as always the few-shot way. For this end, I decided to use the support set
-            to compute the loss and update the optimizer, instead the query set has
-            been used to compute the accuracy and update the optimizer as well
-        """
-        if self.device != "cpu":
-            support_data = support_data.to(self.device)
-            query_data = query_data.to(self.device)
-
-        optimizer.zero_grad()
-
-        # First use the support set
-        support_logits, _, _ = self.model(support_data.x, support_data.edge_index, support_data.batch)
-        support_loss = criterion(support_logits, support_data.y)
-        support_loss.backward()
-        optimizer.step()
-
-        # Compute performances on the query set
-        query_logits, _, _ = self.model(query_data.x, query_data.edge_index, query_data.batch)
-        query_loss = criterion(query_logits, query_data.y)
-
-        with torch.no_grad():
-            preds = F.softmax(query_logits, dim=1).argmax(dim=1)
-            query_acc = compute_accuracy(preds, query_data.y, self.is_oh_train)
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         
-        return query_acc, query_loss, query_loss + support_loss
+        @FlagGDA.flag(gnn=self.model, criterion=criterion, 
+        input_data=(support_data, query_data), optimizer=optimizer, 
+        iterations=self.flag_m, step_size=self.ass, use=self.use_flag, 
+        oh_labels=self.is_oh_train, device=self.device)
+        def __train_step(
+            sprt_data: pyg_data.Data, qry_data: pyg_data.Data,
+            opt: optim.Optimizer, loss_fn: _Loss | _WeightedLoss
+        ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+            """ Run one step of non-meta training. In this case we would like to use
+                as always the few-shot way. For this end, I decided to use the support set
+                to compute the loss and update the optimizer, instead the query set has
+                been used to compute the accuracy and update the optimizer as well
+            """
+            if self.device != "cpu":
+                sprt_data = sprt_data.to(self.device)
+                qry_data = qry_data.to(self.device)
+
+            opt.zero_grad()
+
+            # First use the support set
+            support_logits, _, _ = self.model(sprt_data.x, sprt_data.edge_index, sprt_data.batch)
+            support_loss = loss_fn(support_logits, sprt_data.y)
+            support_loss.backward()
+            opt.step()
+
+            # Compute performances on the query set
+            query_logits, _, _ = self.model(qry_data.x, qry_data.edge_index, qry_data.batch)
+            query_loss = loss_fn(query_logits, qry_data.y)
+
+            with torch.no_grad():
+                preds = F.softmax(query_logits, dim=1).argmax(dim=1)
+                query_acc = compute_accuracy(preds, qry_data.y, self.is_oh_train)
+            
+            return query_acc, query_loss, query_loss + support_loss
+
+        acc_list, loss_list, loss = __train_step(support_data, query_data, optimizer, criterion)
+        return acc_list, loss_list, loss
 
     def _train(self, optimizer: optim.Optimizer,
                      criterion: _Loss | _WeightedLoss, 
@@ -518,12 +531,6 @@ class Trainer(object):
             optimizer, mode="min", factor=0.5, 
             patience=self.patience, verbose=True, min_lr=1e-05
         )
-
-        # If use_exists is True we need to load pre-trained info for the optimizer
-        # if self.use_exists:
-        #     model_name = f"{self.dataset_name}_{self.model_name.upper()}4MAML_bestModel.pth"
-        #     saved_data = torch.load(os.path.join(self.save_path, model_name))
-        #     optimizer.load_state_dict(saved_data["optimizer"])
 
         self.logger.debug("Starting non-meta Optimization")
         data = {"val_acc": [], "train_acc" : [], "train_loss" : []}

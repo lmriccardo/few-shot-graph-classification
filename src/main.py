@@ -177,7 +177,7 @@ def main() -> None:
                 n_xval=configs["n_xval"] if configs["use_mevolve"] else "M-Evolve not used",
                 m_iters=configs["iters"] if configs["use_mevolve"] else "M-Evolve not used",
                 m_heu=configs["heuristic"] if configs["use_mevolve"] else "M-Evolve not used",
-                flag_m=configs["falg_m"] if configs["use_flag"] else "FLAG not used"
+                flag_m=configs["flag_m"] if configs["use_flag"] else "FLAG not used"
         )
 
         print(configurations, file=sys.stdout if not configs["file_log"] else open(logger.handlers[1].baseFilename, mode="a"))
