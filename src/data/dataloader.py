@@ -92,7 +92,10 @@ class FewShotDataLoader(object):
             x, edge_index, label = graph_data
 
             # Insert the label
-            labels.append(label.item())
+            if not self.oh_labels:
+                labels.append(label.item())
+            else:
+                labels.append(label.tolist())
 
             # First generate single data for the datalist
             data_list.append(pyg_data.Data(x=x, edge_index=edge_index, y=label))
@@ -111,13 +114,7 @@ class FewShotDataLoader(object):
             node_number = node_number + x.shape[0]
             node2new_nodes = dict(zip(nodes, new_nodes))
             row1 = torch.tensor(list(map(lambda x: node2new_nodes[x], row1)))
-
-            try:
-                row2 = torch.tensor(list(map(lambda x: node2new_nodes[x], row2)))
-            except KeyError as ke:
-                import os
-                os.system(f"echo {node2new_nodes} > output.txt")
-                raise ke
+            row2 = torch.tensor(list(map(lambda x: node2new_nodes[x], row2)))
 
             edge_index = torch.vstack((row1, row2))
 
@@ -130,12 +127,22 @@ class FewShotDataLoader(object):
             graph_indicator.extend([index] * x.shape[0])
         
         # Label remapping
+        label_mapping = dict()
         if not self.oh_labels:
             label_mapping = dict(zip(sorted(set(labels)), range(len(set(labels)))))
             labels = list(map(lambda x: label_mapping[x], labels))
+
+        if not self.oh_labels:
+            return (
+                node_attributes, edge_indices, torch.Tensor(labels).long(),
+                torch.tensor(graph_indicator), data_list, label_mapping
+            )
+
+        labels = torch.tensor(labels)
+        labels = labels[:, torch.nonzero(labels)[:, -1].unique(sorted=True)]
         
         return (
-            node_attributes, edge_indices, torch.Tensor(labels).long(),
+            node_attributes, edge_indices, labels,
             torch.tensor(graph_indicator), data_list, label_mapping
         )
 

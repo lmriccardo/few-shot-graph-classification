@@ -8,7 +8,7 @@ import numpy as np
 from torch.nn.modules.loss import _Loss, _WeightedLoss
 from algorithms.asmaml.asmaml import AdaptiveStepMAML
 from algorithms.mevolve.mevolve import MEvolveGDA
-from algorithms.gmixup.gmixup import OHECrossEntropy
+from algorithms.gmixup.gmixup import OHECrossEntropy, GMixupGDA
 from algorithms.flag.flag import FlagGDA
 from models.sage4maml import SAGE4MAML
 from models.gcn4maml import GCN4MAML
@@ -615,6 +615,15 @@ class Trainer(object):
             _ = me.evolve()
 
             return
+
+        if self.use_gmixup:
+            # Augment original dataset
+            gm = GMixupGDA(self.train_ds)
+            self.train_ds = gm()
+            self.is_oh_train = True
+            
+            # Recompute the train dataloader
+            self.train_dl, _ = self._get_dataloaders()
 
         if self.meta is not None:
             self._meta_run()

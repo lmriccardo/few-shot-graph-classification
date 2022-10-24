@@ -12,6 +12,9 @@ from algorithms.asmaml.asmaml import AdaptiveStepMAML
 import argparse
 import config
 
+import torch
+torch.set_printoptions(precision=3)
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
