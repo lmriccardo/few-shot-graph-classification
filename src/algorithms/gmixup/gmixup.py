@@ -17,7 +17,7 @@ import math
 import random
 
 
-def align_graphs(graphs : List[pyg_data.Data], padding: bool=True) -> Tuple[
+def align_graphs(graphs: List[pyg_data.Data], max_nnodes: int=-1, padding: bool=True) -> Tuple[
     List[torch.Tensor], torch.Tensor, torch.Tensor, List[torch.Tensor], int, int
 ]:
     """
@@ -28,7 +28,7 @@ def align_graphs(graphs : List[pyg_data.Data], padding: bool=True) -> Tuple[
     """
     num_nodes = [data.x.shape[0] for data in graphs]
     num_features = graphs[0].x.shape[1]
-    max_num = max(num_nodes)
+    max_num = max(num_nodes) if max_nnodes == -1 else max_nnodes
     min_num = min(num_nodes)
 
     aligned_graphs = []
@@ -39,9 +39,14 @@ def align_graphs(graphs : List[pyg_data.Data], padding: bool=True) -> Tuple[
 
     for graph_i, data in enumerate(graphs):
         n_nodes = num_nodes[graph_i]
+
+        # There is the case in which not all nodes are in the edge index matrix
+        if data.edge_index.flatten().unique(sorted=False).shape[0] < n_nodes:
+            n_nodes = data.edge_index.flatten().unique(sorted=False).shape[0]
+
         g = build_adjacency_matrix(data)
 
-        node_degree = 0.5 * (g.sum(dim=1) + g.sum(dim=1))
+        node_degree = 0.5 * (g.sum(dim=0) + g.sum(dim=1))
         node_degree = node_degree / node_degree.sum()
         idx = torch.argsort(node_degree, descending=True)
 
@@ -123,7 +128,20 @@ def two_graphons_mixup(two_graphons: Tuple[Tuple[torch.Tensor, torch.Tensor, tor
 
     mixup_label = la * first_label + (1 - la) * second_label
     mixup_graphon = la * first_graphon + (1 - la) * second_graphon
-    mixup_x = la * first_x + (1 - la) * second_x
+
+    # First_x and second_x must match in shape
+    # So, we can add padding to the less longer
+    max_x_shape = max(first_x.shape[0], second_x.shape[0])
+
+    # Reshape first_x
+    new_first_x = torch.zeros((max_x_shape, first_x.shape[1]))
+    new_first_x[:first_x.shape[0], :] = first_x
+
+    # Reshape second_x
+    new_second_x = torch.zeros((max_x_shape, second_x.shape[1]))
+    new_second_x[:second_x.shape[0], :] = second_x
+
+    mixup_x = la * new_first_x + (1 - la) * new_second_x
 
     sample_graph_label = mixup_label
     sample_graph_x = mixup_x
@@ -214,12 +232,21 @@ class GMixupGDA:
         num_classes = max(self.dataset.classes) + 1
         graphons = defaultdict(list)
 
+        # Before we need to compute the maximum number of nodes
+        # a graph in the dataset can have. That's because, after
+        # we will have to compute the sum between graphons, that
+        # needs to be all of the same size.
+        max_nnodes = -1
+        for _, (graph_data, label) in self.dataset.graph_ds.items():
+            data = to_pygdata(graph_data, label)
+            max_nnodes = max(max_nnodes, data.x.shape[0])
+
         for label, graph_id_list in class_graphs.items():
             one_hot_label = F.one_hot(torch.tensor([label]).long(), num_classes=num_classes)[0]
             print(f"Estimating graphons for label: {label} -> {one_hot_label}")
 
             graph_list = [to_pygdata(self.dataset.graph_ds[graph][0], label) for graph in graph_id_list]
-            aligned_graphs, aligned_nodes_features, batches, _, _, _ = align_graphs(graph_list)
+            aligned_graphs, aligned_nodes_features, batches, _, _, _ = align_graphs(graph_list, max_nnodes=max_nnodes)
             pooled_x = global_mean_pool(aligned_nodes_features, batches)
             graphon = usvd(aligned_graphs, 0.2)
             graphons[label].append((graphon, pooled_x, one_hot_label))
@@ -258,5 +285,8 @@ class GMixupGDA:
         new_dataset = OHGraphDataset(dataset) + OHGraphDataset.from_dict(augmented_graphs)
 
         print("RESULTING AUGMENTED DATASET HAS SIZE: ", len(new_dataset))
+
+        # import sys
+        # sys.exit()
         
         return new_dataset
