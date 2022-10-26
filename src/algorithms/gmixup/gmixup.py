@@ -107,7 +107,7 @@ def usvd(aligned_graphs: List[torch.Tensor], threshold: float=2.02) -> torch.Ten
     graphon = u @ s.diag() @ v
     graphon[graphon > 1] = 1
     graphon[graphon < 0] = 0
-    
+
     return graphon
 
 
@@ -145,8 +145,11 @@ def two_graphons_mixup(two_graphons: Tuple[Tuple[torch.Tensor, torch.Tensor, tor
 
     sample_graph_label = mixup_label
     sample_graph_x = mixup_x
-
     sample_graphs = []
+
+    # Reduce the size of the graphon if sample_graph_x is smaller
+    if sample_graph_x.shape[0] < mixup_graphon.shape[0]:
+        mixup_graphon = mixup_graphon[:sample_graph_x.shape[0], :sample_graph_x.shape[0]]
     
     for _ in range(num_sample):
         sample_graph = (torch.rand(*mixup_graphon.shape) <= mixup_graphon).type(torch.int)
@@ -156,10 +159,12 @@ def two_graphons_mixup(two_graphons: Tuple[Tuple[torch.Tensor, torch.Tensor, tor
         sample_graph = sample_graph[:, sample_graph.sum(dim=0) != 0]
         edge_index, _ = dense_to_sparse(sample_graph)
 
+        print(sample_graph.shape[0], sample_graph_x.shape)
+
         sample_graphs.append(
             pyg_data.Data(
                 x=torch.tensor(random.sample(
-                    sample_graph_x.tolist(), edge_index.shape[1]), 
+                    sample_graph_x.tolist(), sample_graph.shape[0]),
                     dtype=torch.float
                 ),
                 y=sample_graph_label,
@@ -250,9 +255,10 @@ class GMixupGDA:
             pooled_x = global_mean_pool(aligned_nodes_features, batches)
             graphon = usvd(aligned_graphs, 0.2)
             graphons[label].append((graphon, pooled_x, one_hot_label))
-        
+
         aug_num = int( self.dataset.number_of_classes * (self.dataset.number_of_classes - 1) / 2 )
         num_sample = int( len(self.dataset) * aug_ratio / aug_num )
+        num_sample = 1 if num_sample == 0 else num_sample
         lam_list = torch.Tensor(aug_num,).uniform_(lam_range[0], lam_range[1]).tolist()
 
         print(f"=======================================\nNumber of samples: {num_sample}")
@@ -272,9 +278,9 @@ class GMixupGDA:
                 second_graphon = random.sample(graphons[label_y], k=1)[0]
                 two_graphons = [first_graphon, second_graphon]
                 augmented_graphs += two_graphons_mixup(two_graphons, la=lam_list[current_lam_index], num_sample=num_sample)
-            
+
             print(f"New graphs for label: {augmented_graphs[-1].y}")
-            
+
             current_lam_index += 1
 
         print("=======================================")
@@ -286,7 +292,4 @@ class GMixupGDA:
 
         print("RESULTING AUGMENTED DATASET HAS SIZE: ", len(new_dataset))
 
-        # import sys
-        # sys.exit()
-        
         return new_dataset
