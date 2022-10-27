@@ -36,7 +36,13 @@ Each of the dataset has been splitted into *train*, *test* and *validation*, and
 
 These are the link from which you can download the datasets: [TRIANGLES](https://drive.google.com/drive/folders/1Ghdi2dwoqMsqrAwxz4bYZrZI7Y8-B6In?usp=sharing), [COIL-DEL](https://drive.google.com/drive/folders/1m3frg5_MPOPPEoTJO7aSGDKMh-nqOOHL?usp=sharing), [R52](https://drive.google.com/drive/folders/158WZsLUMBBUJRR_RdbHY3I3Ea2yPU8lW?usp=sharing) and [Letter-High](https://drive.google.com/drive/folders/1573PBEW0R8xyZnkpcEBMht2l4p2jbbkm?usp=sharing).
 
-However, you can give whathever dataset you want. The only requirement is that it is in a specific form, i.e. the one previously descripted: a folder containing four files name as `<dataname>_node_attributes.txt`, `<dataname>_graph_labels.txt`, `<dataname>_graph_edges.txt` and `<dataname>_graph_indicator.txt`. It is preferred to have the pickle files, since their content changes and we already have pre-defined train, validation and test set. In the other case, in which you provide non-pickle files, you will have to transform those files using some utility functions stored in the `utils.py` file (more in the following section). 
+These are the statistics of the three datasets
+
+| **DATASET**     | **$|\mathcal{G}|$** | **Avg.$|\mathcal{V}|$** | **Avg.$|\mathcal{E}|$** |
+|-----------------|-----------------------|---------------------------|---------------------------|
+| **TRIANGLES**   | 45000                 | 28.85                     | 35.50                     |
+| **Letter-High** | 2250                  | 4.67                      | 4.50                      |
+| **COIL-DEL**    | 3900                  | 21.54                     | 54.22                     |
 
 ---
 
@@ -91,7 +97,6 @@ In this section I'm going to describe the structure of this project.
 │   ├── config.py
 │   └── main.py
 ├── fsgc.ipynb                 # The notebook of the project (ready-to-go)
-├── LICENSE
 └── README.md
 ```
 
@@ -204,6 +209,12 @@ Finally, I decided to use as baseline comparision results and performances given
 
 ---
 
-## 6. Results and Conclusions
+## 6. Results
 
-TODO. 
+Each dataset has been trained, validated and tested using the Graph SAGE model: 3 SAGE convolutional layers, 3 SAGPool layers and 3 final FC layer, all of them using the LeakyRELU activation function except for the last linear layer for which the softmax is used. Each model has been trained using 200 epochs each of them running 200 training and validation episodes, then tested using only 200 testing episodes. Finally, the configuration for the few-shot sampling is the same for all dataset: 3 classes (way) for train, test and validation, 10 samples (shot) for support train and test/validation and 15 samples (query) for query train and test/validation. At the end, each episode had 75 graphs. These are the otained results
+
+| **A%**          | **AS-MAML** | **M-Evolve** | **G-Mixup** | **FLAG**  | **Base** |
+|-----------------|-------------|--------------|-------------|-----------|----------|
+| **TRIANGLES**   |    73.47    |     80.88    |    72.63    | **82.17** |   79.81  |
+| **COIL-DEL**    |  **86.51**  |     34.60    |    32.17    |   30.01   |   32.66  |
+| **Letter-High** |  **75.27**  |     42.73    |    35.48    |   41.48   |   40.63  |
