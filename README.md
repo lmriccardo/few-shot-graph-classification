@@ -191,7 +191,7 @@ options:
 
 ### 4.1. Docker
 
-Alternatively, I have already created a [Docker Image](https://hub.docker.com/repository/docker/lmriccardo/fsgc) that can be pulled with `docker pull lmriccardo/fsgc:1.0a`. Then, you need to run the container with `docker run --rm -it lmriccardo/fsgc:1.0a` and, finally, run the same python command given above: `python main.py`. 
+Alternatively, I have already created a [Docker Image](https://hub.docker.com/repository/docker/lmriccardo/fsgc) that can be pulled with `docker pull lmriccardo/fsgc:1.0`. Then, you need to run the container with `docker run --rm -it lmriccardo/fsgc:1.0` and, finally, run the same python command given above: `python main.py`. 
 
 ---
 
