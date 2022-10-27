@@ -9,6 +9,7 @@ RUN apt-get install -y python3-pip && ln -sf pip3 /usr/bin/pip
 # Install required packages
 RUN pip install --no-cache-dir -U pip
 RUN pip install --no-cache-dir torch
+RUN pip install --no-cache-dir torchnet
 RUN pip install --no-cache-dir torch-scatter     \
                                torch-sparse      \
                                torch-cluster     \
