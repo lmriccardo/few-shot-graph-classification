@@ -27,10 +27,8 @@ class FlagGDA:
     regularizers and topological augmentation. 
     """
     @staticmethod
-    def flag(gnn        : nn.Module, 
-             criterion  : Union[_Loss, _WeightedLoss], 
+    def flag(model      : nn.Module, 
              input_data : Tuple[Data, Data],
-             optimizer  : optim.Optimizer,
              iterations : int,
              step_size  : float,
              use        : bool=True,
@@ -56,56 +54,43 @@ class FlagGDA:
             @wraps(func)
             def wrapper(*args, **kwargs) -> Tuple[float, float, nn.Module, torch.Tensor]:
                 avg_acc, avg_loss = [], []
-                avg_acc_train, avg_loss_train, loss = func(*args, **kwargs)
-                avg_acc.append(avg_acc_train.item())
-                avg_loss.append(avg_loss_train.item())
+                accs, step, final_loss, total_loss = func(*args, **kwargs)
+                avg_acc.append(accs[step])
+                avg_loss.append(final_loss)
 
                 if use:
-                    # Setup model for training and zeros optimizer grads
-                    gnn.train()
-                    optimizer.zero_grad()
-
-                    # Since we have the support and query set as input, 
-                    # I can merge this two data into a single batch
-                    # and then perturb this entire batch. 
                     support_, query_ = input_data
-                    data = data_batch_collate_edge_renamed([support_, query_], oh_labels=oh_labels)
-                    targets = data.y
-
-                    perturbation = torch.FloatTensor(*data.x.shape).uniform_(-step_size, step_size).to(device)
-                    perturbation.requires_grad_()
-                    logits, _, _ = gnn(data.x + perturbation, data.edge_index, data.batch)
-                    loss = criterion(logits, targets)
-                    loss = loss / iterations
 
                     for _ in range(iterations):
-                        with torch.no_grad():
-                            preds = F.softmax(logits, dim=1).argmax(dim=1)
-                            avg_acc.append(compute_accuracy(preds, targets, oh_labels))
-                            avg_loss.append(loss.item())
-                        
-                        loss.backward()
+                        support_perturbation = torch.FloatTensor(*support_.x.shape).uniform_(-step_size, step_size).to(device)
+                        support_perturbation.requires_grad_()
+                        support_data = Data(x=support_.x + support_perturbation, 
+                                            edge_index=support_.edge_index, 
+                                            y=support_.y, 
+                                            batch=support_.batch
+                        )
+                        support_data.to(device)
 
-                        perturb_data = perturbation.detach() + step_size * torch.sign(perturbation.grad.detach())
-                        perturbation.data = perturb_data.data
-                        perturbation.grad[:] = 0
+                        query_perturbation = torch.FloatTensor(*query_.x.shape).uniform_(-step_size, step_size).to(device)
+                        query_perturbation.requires_grad_()
+                        query_data = Data(x=query_.x + query_perturbation, 
+                                          edge_index=query_.edge_index, 
+                                          y=query_.y, 
+                                          batch=query_.batch
+                        )
+                        query_data.to(device)
 
-                        logits, _, _ = gnn(data.x + perturbation, data.edge_index, data.batch)
-                        loss = criterion(logits, targets)
-                        loss = loss / iterations
-                    
-                    with torch.no_grad():
-                        preds = F.softmax(logits, dim=1).argmax(dim=1)
-                        avg_acc.append(compute_accuracy(preds, targets, oh_labels))
-                        avg_loss.append(loss)
-                        
-                    loss.backward()
-                    optimizer.step()
+                        accs, step, final_loss, new_total_loss, *_ = model(support_data, query_data)
+                        avg_acc.append(accs[step])
+                        avg_loss.append(final_loss)
+
+                        total_loss += new_total_loss
+
 
                 avg_acc = sum(avg_acc) / len(avg_acc)
                 avg_loss = sum(avg_loss) / len(avg_loss)
 
-                return torch.tensor(avg_acc), torch.tensor(avg_loss), loss
+                return torch.tensor(avg_acc), step, torch.tensor(avg_loss), total_loss / iterations
 
             return wrapper
 

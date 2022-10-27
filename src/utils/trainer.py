@@ -275,12 +275,18 @@ class Trainer(object):
 
     def _meta_train_step(self, support_data: pyg_data.Data, query_data: pyg_data.Data) -> Any:
         """ Run a single train step """
-        if self.device != "cpu":
-            support_data = support_data.to(self.device)
-            query_data = query_data.to(self.device)
+        
+        @FlagGDA.flag(model=self.meta, input_data=(support_data, query_data), iterations=self.flag_m, 
+        step_size=self.ass, use=self.use_flag, oh_labels=self.is_oh_train, device=self.device)
+        def __meta_train_step(support_data: pyg_data.Data, query_data: pyg_data.Data) -> Any:
+            if self.device != "cpu":
+                support_data = support_data.to(self.device)
+                query_data = query_data.to(self.device)
 
-        accs, step, final_loss, total_loss, *_ = self.meta(support_data, query_data)
-        return accs, step, final_loss, total_loss
+            accs, step, final_loss, total_loss, *_ = self.meta(support_data, query_data)
+            return accs, step, final_loss, total_loss
+
+        return __meta_train_step(support_data, query_data)
 
     def _meta_train(self, epoch: int=0) -> Tuple[List[float], List[float], List[float]]:
         """ Run the training """
@@ -296,7 +302,11 @@ class Trainer(object):
             support_data, _, query_data, _ = data
             accs, step, final_loss, total_loss = self._meta_train_step(support_data, query_data)
 
-            train_accs.append(accs[step])
+            if not self.use_flag:
+                train_accs.append(accs[step])
+            else:
+                train_accs.append(accs)
+
             train_final_losses.append(final_loss)
             train_total_losses.append(total_loss)
 
@@ -407,197 +417,6 @@ class Trainer(object):
 
         self.logger.debug("Optimization finished")
 
-    ############################################## NON-META OPTIMIZATION SECTION ##############################################
-
-    def _train_step(self, support_data: pyg_data.Data, query_data: pyg_data.Data,
-                    optimizer: optim.Optimizer, criterion: _Loss | _WeightedLoss
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        
-        @FlagGDA.flag(gnn=self.model, criterion=criterion, 
-        input_data=(support_data, query_data), optimizer=optimizer, 
-        iterations=self.flag_m, step_size=self.ass, use=self.use_flag, 
-        oh_labels=self.is_oh_train, device=self.device)
-        def __train_step(
-            sprt_data: pyg_data.Data, qry_data: pyg_data.Data,
-            opt: optim.Optimizer, loss_fn: _Loss | _WeightedLoss
-        ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-            """ Run one step of non-meta training. In this case we would like to use
-                as always the few-shot way. For this end, I decided to use the support set
-                to compute the loss and update the optimizer, instead the query set has
-                been used to compute the accuracy and update the optimizer as well
-            """
-            if self.device != "cpu":
-                sprt_data = sprt_data.to(self.device)
-                qry_data = qry_data.to(self.device)
-
-            opt.zero_grad()
-
-            # First use the support set
-            support_logits, _, _ = self.model(sprt_data.x, sprt_data.edge_index, sprt_data.batch)
-            support_loss = loss_fn(support_logits, sprt_data.y)
-            support_loss.backward()
-            opt.step()
-
-            # Compute performances on the query set
-            query_logits, _, _ = self.model(qry_data.x, qry_data.edge_index, qry_data.batch)
-            query_loss = loss_fn(query_logits, qry_data.y)
-
-            with torch.no_grad():
-                preds = F.softmax(query_logits, dim=1).argmax(dim=1)
-                query_acc = compute_accuracy(preds, qry_data.y, self.is_oh_train)
-            
-            return query_acc, query_loss, query_loss + support_loss
-
-        acc_list, loss_list, loss = __train_step(support_data, query_data, optimizer, criterion)
-        return acc_list, loss_list, loss
-
-    def _train(self, optimizer: optim.Optimizer,
-                     criterion: _Loss | _WeightedLoss, 
-                     epoch    : int=0
-    ) -> Tuple[List[float], List[float], List[float]]:
-        """ Run the non meta training """
-        print("Starting Training phase", file=sys.stdout if not self.file_log else open(
-            self.logger.handlers[1].baseFilename, mode="a"
-        ))
-
-        self.model.train()
-
-        train_accs, train_final_losses, train_total_losses = [], [], []
-        for i, data in enumerate(tqdm(self.train_dl(epoch)), 1):
-            support_data, _, query_data, _ = data
-            acc, final_loss, total_loss = self._train_step(
-                support_data, query_data, optimizer, criterion
-            )
-
-            final_loss = final_loss.detach()
-            total_loss = total_loss.detach()
-
-            train_accs.append(acc)
-            train_final_losses.append(final_loss)
-            train_total_losses.append(total_loss)
-
-            if (i + 1) % 100 == 0:
-                print("({:d}) Mean Accuracy: {:.6f}, Mean Final Loss: {:.6f}, Mean Total Loss: {:.6f}".format(
-                    epoch, np.mean(train_accs), np.mean(train_final_losses), np.mean(train_total_losses)
-                ), file=sys.stdout if not self.file_log else open(
-                        self.logger.handlers[1].baseFilename, mode="a"
-                ))
-
-        print("Ended Training Phase", file=sys.stdout if not self.file_log else open(
-            self.logger.handlers[1].baseFilename, mode="a"
-        ))
-
-        return train_accs, train_final_losses, train_total_losses
-    
-    def _validation_step(self, support_data: pyg_data.Data, query_data  : pyg_data.Data) -> float:
-        """ Run a single non-meta validation step """
-        # First merge support and query set
-        merged_data = data_batch_collate_edge_renamed([support_data, query_data], self.is_oh_validation)
-
-        # Send the data to the GPU if necessary
-        if self.device != "cpu":
-            merged_data = merged_data.to(self.device)
-        
-        # Compute the accuracy
-        logits, _, _ = self.model(merged_data.x, merged_data.edge_index, merged_data.batch)
-        with torch.no_grad():
-            preds = F.softmax(logits, dim=1).argmax(dim=1)
-            acc = compute_accuracy(preds, merged_data.y, self.is_oh_validation)
-
-        return acc
-
-    def _validation(self, epoch: int=0) -> List[float]:
-        """ Run the non-meta Validation """
-        print("Starting Validation Phase", file=sys.stdout if not self.file_log else open(
-            self.logger.handlers[1].baseFilename, mode="a"
-        ))
-
-        # Set validation phase
-        self.model.eval()
-
-        val_accs = []
-        for _, data in enumerate(tqdm(self.validation_dl(epoch)), 1):
-            support_data, _, query_data, _ = data
-            acc = self._validation_step(support_data, query_data)
-            val_accs.append(acc)
-        
-        return val_accs
-
-    def _run(self) -> None:
-        """ Run the non-meta optimization """
-        criterion = nn.CrossEntropyLoss() if not self.is_oh_train else OHECrossEntropy()
-        optimizer = optim.Adam(self.model.parameters(), lr=self.outer_lr, weight_decay=self.weight_decay)
-        lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode="min", factor=0.5, 
-            patience=self.patience, verbose=True, min_lr=1e-05
-        )
-
-        self.logger.debug("Starting non-meta Optimization")
-        data = {"val_acc": [], "train_acc" : [], "train_loss" : []}
-
-        for epoch in range(self.epochs):
-            print("=" * 103, file=sys.stdout if not self.file_log else open(
-                    self.logger.handlers[1].baseFilename, mode="a"
-                )
-            )
-
-            print("Epoch Number {:04d}".format(epoch), file=sys.stdout if not self.file_log else open(
-                    self.logger.handlers[1].baseFilename, mode="a"
-                )
-            )
-
-            train_accs, train_final_losses, _ = self._train(optimizer, criterion, epoch)
-            val_accs = self._validation(epoch)
-
-            val_acc_avg = np.mean(val_accs)
-            train_acc_avg = np.mean(train_accs)
-            train_loss_avg = np.mean(train_final_losses)
-            val_acc_ci95 = 1.96 * np.std(np.array(val_accs)) / np.sqrt(self.val_episode)
-            printable_str = ""
-
-            data["val_acc"].append(val_acc_avg)
-            data["train_acc"].append(train_acc_avg)
-            data["train_loss"].append(train_final_losses)
-
-            if val_acc_avg > self.max_val_acc:
-                self.max_val_acc = val_acc_avg
-                printable_str = "Epoch(*** Best ***) {:04d}\n".format(epoch)
-
-                torch.save(
-                    {
-                        'epoch' : epoch, 
-                        'embedding' : self.model2save.state_dict(), 
-                        'optimizer' : optimizer.state_dict()
-                    }, 
-                    os.path.join(self.save_path, self.save_string)
-                )
-
-            else:
-                printable_str = "Epoch {:04d}\n".format(epoch)
-
-            printable_str += (
-                "\tAvg Train Loss: {:.6f}, Avg Train Accuracy: {:.6f}\n" +
-                "\tAvg Validation Accuracy: {:.2f} ±{:.26f}\n" +
-                "\tLearning Rate: {}\n" +
-                "\tBest Current Validation Accuracy: {:.2f}").format(
-                    train_loss_avg, train_acc_avg, val_acc_avg, val_acc_ci95, 
-                    optimizer.state_dict()["param_groups"][0]["lr"], self.max_val_acc
-                )
-
-            print(printable_str, file=sys.stdout if not self.file_log else open(
-                    self.logger.handlers[1].baseFilename, mode="a"
-                )
-            )
-
-            save_with_pickle(
-                os.path.join(
-                    "../results", self.save_string.replace(
-                        "_bestModel.pth", "_results.pickle"
-                    )
-                ), data
-            )
-
-            lr_scheduler.step(train_loss_avg)
 
     @elapsed_time
     def run(self) -> None:
@@ -625,8 +444,4 @@ class Trainer(object):
             # Recompute the train dataloader
             self.train_dl, _ = self._get_dataloaders()
 
-        if self.meta is not None:
-            self._meta_run()
-            return
-        
-        self._run()
+        self._meta_run()
