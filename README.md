@@ -38,7 +38,7 @@ These are the link from which you can download the datasets: [TRIANGLES](https:/
 
 These are the statistics of the three datasets
 
-| **DATASET**     | **$|\mathcal{G}|$** | **Avg.$|\mathcal{V}|$** | **Avg.$|\mathcal{E}|$** |
+| **DATASET**     | **\$\mathcal{G}$\|** | **Avg.\|$\mathcal{V}$\|** | **Avg.\|$\mathcal{E}$\|** |
 |-----------------|-----------------------|---------------------------|---------------------------|
 | **TRIANGLES**   | 45000                 | 28.85                     | 35.50                     |
 | **Letter-High** | 2250                  | 4.67                      | 4.50                      |
