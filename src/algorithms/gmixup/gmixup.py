@@ -159,8 +159,6 @@ def two_graphons_mixup(two_graphons: Tuple[Tuple[torch.Tensor, torch.Tensor, tor
         sample_graph = sample_graph[:, sample_graph.sum(dim=0) != 0]
         edge_index, _ = dense_to_sparse(sample_graph)
 
-        print(sample_graph.shape[0], sample_graph_x.shape)
-
         sample_graphs.append(
             pyg_data.Data(
                 x=torch.tensor(random.sample(

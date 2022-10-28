@@ -53,12 +53,12 @@ class FlagGDA:
 
             @wraps(func)
             def wrapper(*args, **kwargs) -> Tuple[float, float, nn.Module, torch.Tensor]:
-                avg_acc, avg_loss = [], []
                 accs, step, final_loss, total_loss = func(*args, **kwargs)
-                avg_acc.append(accs[step])
-                avg_loss.append(final_loss)
 
                 if use:
+                    avg_acc, avg_loss = [], []
+                    avg_acc.append(accs[step])
+                    avg_loss.append(final_loss)
                     support_, query_ = input_data
 
                     for _ in range(iterations):
@@ -87,10 +87,12 @@ class FlagGDA:
                         total_loss += new_total_loss
 
 
-                avg_acc = sum(avg_acc) / len(avg_acc)
-                avg_loss = sum(avg_loss) / len(avg_loss)
+                    avg_acc = sum(avg_acc) / len(avg_acc)
+                    avg_loss = sum(avg_loss) / len(avg_loss)
 
-                return torch.tensor(avg_acc), step, torch.tensor(avg_loss), total_loss / iterations
+                    return torch.tensor(avg_acc), step, torch.tensor(avg_loss), total_loss / iterations
+                
+                return accs, step, final_loss, total_loss
 
             return wrapper
 

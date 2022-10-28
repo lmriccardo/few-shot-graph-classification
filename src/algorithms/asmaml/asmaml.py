@@ -7,6 +7,8 @@ import torch.nn.functional as F
 import torch_geometric.data as gdata
 
 from models.stopcontrol import StopControl
+from algorithms.gmixup.gmixup import OHECrossEntropy
+from utils.utils import compute_accuracy
 
 import numpy as np
 import math
@@ -37,8 +39,6 @@ class AdaptiveStepMAML(nn.Module):
         self.stop_gate = StopControl(kwargs["scis"], kwargs["schs"])
 
         self.meta_optim = self.configure_optimizers()
-
-        self.loss      = nn.CrossEntropyLoss()
         self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
             self.meta_optim, mode="min", factor=0.5, 
             patience=kwargs["patience"], verbose=True, min_lr=1e-05
@@ -47,6 +47,7 @@ class AdaptiveStepMAML(nn.Module):
         self.graph_embs = []
         self.graph_labels = []
         self.index = 1
+        self.is_oh_labels = False
 
     def configure_optimizers(self):
         """Configure Optimizers"""
@@ -55,9 +56,13 @@ class AdaptiveStepMAML(nn.Module):
                            {'params': self.stop_gate.parameters(), 'lr': self.stop_lr}],
                           lr=1e-04, weight_decay=self.weight_decay
                )
-        
-    def compute_loss(self, logits: torch.Tensor, label: torch.Tensor) -> float:
-        return self.loss(logits, label.long())
+
+    @staticmethod
+    def compute_loss(logits: torch.Tensor, label: torch.Tensor, is_oh_labels: bool=False) -> float:
+        if not is_oh_labels:
+            return nn.CrossEntropyLoss()(logits, label.long())
+
+        return OHECrossEntropy()(logits, label)
 
     @staticmethod
     def smooth(weight, p=10, eps=1e-10):
@@ -128,7 +133,7 @@ class AdaptiveStepMAML(nn.Module):
             support_label_ = support_label[0] if self.paper else support_data.y
 
             logits, score, _ = self.net(support_nodes_, support_edge_index_, support_graph_indicator_)
-            loss = self.compute_loss(logits, support_label_)
+            loss = self.compute_loss(logits, support_label_, self.is_oh_labels)
             grad = torch.autograd.grad(loss, fast_parameters, create_graph=True)
 
             stop_pro = self.stop(k, loss, score)
@@ -138,7 +143,7 @@ class AdaptiveStepMAML(nn.Module):
 
             with torch.no_grad():
                 pred = F.softmax(logits, dim=1).argmax(dim=1)
-                correct = torch.eq(pred, support_label_).sum().item()
+                correct = torch.eq(pred, support_label_.argmax(dim=1)).sum().item()
                 train_accs.append(correct / support_label_.size(0))
 
             step = k
@@ -161,12 +166,12 @@ class AdaptiveStepMAML(nn.Module):
             query_label_ = query_label[0] if self.paper else query_data.y
 
             logits_q, _ ,_= self.net(query_nodes_, query_edge_index_, query_graph_indicator_)
-            loss_q = self.compute_loss(logits_q,query_label_)
+            loss_q = self.compute_loss(logits_q,query_label_,self.is_oh_labels)
             losses_q.append(loss_q)
 
             with torch.no_grad():
                 pred_q = F.softmax(logits_q, dim=1).argmax(dim=1)
-                correct = torch.eq(pred_q, query_label_).sum().item()  # convert to numpy
+                correct = torch.eq(pred_q, query_label_.argmax(dim=1)).sum().item()  # convert to numpy
                 corrects.append(correct)
         
         final_loss = losses_q[step]
@@ -198,6 +203,7 @@ class AdaptiveStepMAML(nn.Module):
         return accs * 100, step, final_loss.item(), total_loss.item(), stop_gates, scores, train_losses, train_accs
 
     def finetuning(self, support_data, query_data):
+
         if self.paper:
             (support_nodes, support_edge_index, support_graph_indicator, support_label) = support_data
             (query_nodes, query_edge_index, query_graph_indicator, query_label) = query_data
@@ -223,7 +229,7 @@ class AdaptiveStepMAML(nn.Module):
             support_label_ = support_label[0] if self.paper else support_data.y
 
             logits,score,_ = self.net(support_nodes_, support_edge_index_, support_graph_indicator_)
-            loss = self.compute_loss(logits, support_label_)
+            loss = self.compute_loss(logits, support_label_, False)
 
             stop_pro = self.stop(k, loss, score)
             self.stop_prob = stop_pro

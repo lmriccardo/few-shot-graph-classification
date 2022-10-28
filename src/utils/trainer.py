@@ -266,9 +266,6 @@ class Trainer(object):
         meta = self.meta_model(self.model, False, **configurations).to(self.device)
         self.model2save = meta
 
-        if self.is_oh_train or self.is_oh_validation:
-            meta.loss = OHECrossEntropy()
-
         return meta
 
     ############################################## META OPTIMIZATION SECTION ##############################################
@@ -443,5 +440,8 @@ class Trainer(object):
             
             # Recompute the train dataloader
             self.train_dl, _ = self._get_dataloaders()
+
+            # Recompute the meta model
+            self.meta.is_oh_labels = True
 
         self._meta_run()
