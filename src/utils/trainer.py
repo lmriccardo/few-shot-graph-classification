@@ -158,22 +158,26 @@ class Trainer(object):
         self.model = self._get_model()
         self.model2save = self.model
 
-        # Load pre-trained if use_exists is True
-        if self.use_exists:
-            self._load_pretrained()
-
         # Create the meta model if required
         self.meta = None
         if self.meta_model is not None:
             self.meta = self._get_meta()
+
+        # Load pre-trained if use_exists is True
+        if self.use_exists:
+            self._load_pretrained()
 
         self.save_string = self._build_save_string()
 
     def _load_pretrained(self) -> None:
         """ Load pre-trained model """
         self.logger.debug("Detected True for pre-trained model loading")
+        
+        model_name = f"{self.dataset_name}_"
+        if self.meta_model is not None:
+            model_name += "AdaptiveStepMAML_"
+        model_name += f"{self.model_name.upper()}4MAML_bestModel.pth"
 
-        model_name = f"{self.dataset_name}_{self.model_name.upper()}4MAML_bestModel.pth"
         saved_data = torch.load(os.path.join(self.save_path, model_name))
 
         if self.meta_model is not None:

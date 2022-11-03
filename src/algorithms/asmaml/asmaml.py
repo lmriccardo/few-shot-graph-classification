@@ -143,7 +143,8 @@ class AdaptiveStepMAML(nn.Module):
 
             with torch.no_grad():
                 pred = F.softmax(logits, dim=1).argmax(dim=1)
-                correct = torch.eq(pred, support_label_.argmax(dim=1)).sum().item()
+                targets = support_label_.argmax(dim=1) if self.is_oh_labels else support_label_
+                correct = torch.eq(pred, targets).sum().item()
                 train_accs.append(correct / support_label_.size(0))
 
             step = k
@@ -171,7 +172,8 @@ class AdaptiveStepMAML(nn.Module):
 
             with torch.no_grad():
                 pred_q = F.softmax(logits_q, dim=1).argmax(dim=1)
-                correct = torch.eq(pred_q, query_label_.argmax(dim=1)).sum().item()  # convert to numpy
+                targets = query_label_.argmax(dim=1) if self.is_oh_labels else query_label_
+                correct = torch.eq(pred_q, targets).sum().item()  # convert to numpy
                 corrects.append(correct)
         
         final_loss = losses_q[step]
