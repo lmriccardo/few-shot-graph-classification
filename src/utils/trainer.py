@@ -277,23 +277,24 @@ class Trainer(object):
     def _meta_train_step(self, support_data: pyg_data.Data, query_data: pyg_data.Data) -> Any:
         """ Run a single train step """
         
-        # @FlagGDA.flag(model=self.meta, input_data=(support_data, query_data), iterations=self.flag_m, 
-        # step_size=self.ass, use=self.use_flag, oh_labels=self.is_oh_train, device=self.device)
-        # def __meta_train_step(support_data: pyg_data.Data, query_data: pyg_data.Data) -> Any:
-        #     if self.device != "cpu":
-        #         support_data = support_data.to(self.device)
-        #         query_data = query_data.to(self.device)
+        @FlagGDA.flag(model=self.meta, input_data=(support_data, query_data), iterations=self.flag_m, 
+        step_size=self.ass, use=self.use_flag, oh_labels=self.is_oh_train, device=self.device)
+        def __meta_train_step(support_data: pyg_data.Data, query_data: pyg_data.Data) -> Any:
+            if self.device != "cpu":
+                support_data = support_data.to(self.device)
+                query_data = query_data.to(self.device)
 
-        #     accs, step, final_loss, total_loss, *_ = self.meta(support_data, query_data)
-        #     return accs, step, final_loss, total_loss
+            accs, step, final_loss, total_loss, *_ = self.meta(support_data, query_data)
+            return accs, step, final_loss, total_loss
 
-        # return __meta_train_step(support_data, query_data)
-        if self.device != "cpu":
-            support_data = support_data.to(self.device)
-            query_data = query_data.to(self.device)
+        return __meta_train_step(support_data, query_data)
+        
+        # if self.device != "cpu":
+        #     support_data = support_data.to(self.device)
+        #     query_data = query_data.to(self.device)
 
-        accs, step, final_loss, total_loss, *_ = self.meta(support_data, query_data)
-        return accs, step, final_loss, total_loss
+        # accs, step, final_loss, total_loss, *_ = self.meta(support_data, query_data)
+        # return accs, step, final_loss, total_loss
 
     def _meta_train(self, epoch: int=0) -> Tuple[List[float], List[float], List[float]]:
         """ Run the training """
