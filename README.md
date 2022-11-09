@@ -20,7 +20,7 @@ Humans learn really quickly from few examples, but what can we say about compute
 
 ## 2. Used Datasets
 
-I decided to use the same datasets considered in the paper for AS-MAML: TRIANGLES, COIL-DEL, R52 and Letter-High. All of them can be downloaded directly from this [page](https://ls11-www.cs.tu-dortmund.de/staff/morris/graphkerneldatasets), which is the origin of these datasets. Downloading from the previous page will result in a ZIP file with: 
+I decided to use the same datasets considered in the paper for AS-MAML: TRIANGLES, COIL-DEL, and Letter-High. All of them can be downloaded directly from this [page](https://ls11-www.cs.tu-dortmund.de/staff/morris/graphkerneldatasets), which is the origin of these datasets. Downloading from the previous page will result in a ZIP file with: 
 
 - `<dataname>_node_attributes.txt` with the attribute vector for each node of each graph
 - `<dataname>_graph_labels.txt` with the class for each graph
@@ -34,7 +34,7 @@ Each of the dataset has been splitted into *train*, *test* and *validation*, and
 - `<dataname>_test_set.pickle` with all the test data as python dictionaries
 - `<dataname>_val_set.pickle` with all the validation data as python dictionaries
 
-These are the link from which you can download the datasets: [TRIANGLES](https://drive.google.com/drive/folders/1Ghdi2dwoqMsqrAwxz4bYZrZI7Y8-B6In?usp=sharing), [COIL-DEL](https://drive.google.com/drive/folders/1m3frg5_MPOPPEoTJO7aSGDKMh-nqOOHL?usp=sharing), [R52](https://drive.google.com/drive/folders/158WZsLUMBBUJRR_RdbHY3I3Ea2yPU8lW?usp=sharing) and [Letter-High](https://drive.google.com/drive/folders/1573PBEW0R8xyZnkpcEBMht2l4p2jbbkm?usp=sharing).
+These are the link from which you can directly download the datasets: [TRIANGLES](https://drive.google.com/drive/folders/1Ghdi2dwoqMsqrAwxz4bYZrZI7Y8-B6In?usp=sharing), [COIL-DEL](https://drive.google.com/drive/folders/1m3frg5_MPOPPEoTJO7aSGDKMh-nqOOHL?usp=sharing) and [Letter-High](https://drive.google.com/drive/folders/1573PBEW0R8xyZnkpcEBMht2l4p2jbbkm?usp=sharing).
 
 These are the statistics of the three datasets
 
@@ -96,7 +96,6 @@ In this section I'm going to describe the structure of this project.
 │   ├── __init__.py
 │   ├── config.py
 │   └── main.py
-├── fsgc.ipynb                 # The notebook of the project (ready-to-go)
 └── README.md
 ```
 
@@ -113,13 +112,7 @@ To run the project you will need to install all the dependencies, so the suggest
 - `networkx` (latest)
 - `sklearn` (latest)
 
-Finally, to run the base project, i.e. entire training and testing with only AS-MAML, just provide to the command-line/terminal the following command
-
-```bash
-$> python main.py
-``` 
-
-For further options to better configuring the execution of the project, please use the `-h, --help` flag. It will gives you the following output, where you can see which options can be modified and for what. 
+Then you can type  `python main.py --help` or `python main.py -h` to obtain the following output, and see which commands to use for configure and run the project
 
 ```bash
 usage: main.py [-h] [-p PATH] [-n NAME] [-d DEVICE] [-l LOG_PATH] [-f] [-s SAVE_PATH] [-m MODEL] [--not-as-maml] [--gmixup] [--flag] [--mevolve]
@@ -189,9 +182,29 @@ options:
   --ass ASS             The attack step size (default: 0.008)
 ```
 
-### 4.1. Docker
+### 4.1 Examples of runs
 
-Alternatively, I have already created a [Docker Image](https://hub.docker.com/repository/docker/lmriccardo/fsgc) that can be pulled with `docker pull lmriccardo/fsgc:1.0`. Then, you need to run the container with `docker run --rm -it lmriccardo/fsgc:1.0` and, finally, run the same python command given above: `python main.py`. 
+Let's assume you want to run just a simple AS-MAML training with 200 epochs on the Letter-High Dataset using the GPU. Then you have to run
+
+```bash
+$ python main.py --name Letter-High --epochs 200 --device gpu
+```
+
+Another example could be: run AS-MAML plus MEvolve with 200 training epochs on TRIANGLES changing the number of MEvolve iterations.
+
+```bash
+$ python main.py --name TRIANGLES --epochs 200 --mevolve --use-pretrained --iters 10
+```
+
+Note that, for MEvolve you need to have a pretrained plain AS-MAML model in the `models` folder. Finally, to run tests just give
+
+```bash
+$ python main.py --name TRIANGLES --test ../models/TRIANGLES_AdaptiveStepMAML_SAGE4MAML_MEvolve_bestModel.pth
+```
+
+### 4.2. Docker
+
+Alternatively, I have already created a [Docker Image](https://hub.docker.com/repository/docker/lmriccardo/fsgc) that can be pulled with `docker pull lmriccardo/fsgc:1.0`. Then, you need to run the container with `docker run --rm -it lmriccardo/fsgc:1.0` and, finally, run the same python command given above: `python main.py [--flags ...]`. 
 
 ---
 
@@ -205,7 +218,7 @@ As I said the goal of this projects is to compare different Graph Data Augmentat
 
 For quick further informations about each of the three techniques I suggest to have a look to their respectively README that you can found at [`./src/algorithms/mevolve`](src/algorithms/mevolve) (for M-Evolve), [`./src/algorithms/flag`](src/algorithms/flag) (for FLAG) and [`./src/algorithms/gmixup`](src/algorithms/gmixup) (for G-Mixup). 
 
-Finally, I decided to use as baseline comparision results and performances given by AS-MAML run on both a classic GCN (for MAML) and a SAGE (for MAML) model. 
+Finally, I decided to use as baseline comparision results and performances given by AS-MAML run using a SAGE (for MAML) model. 
 
 ---
 
@@ -213,8 +226,8 @@ Finally, I decided to use as baseline comparision results and performances given
 
 Each dataset has been trained, validated and tested using the Graph SAGE model: 3 SAGE convolutional layers, 3 SAGPool layers and 3 final FC layer, all of them using the LeakyRELU activation function except for the last linear layer for which the softmax is used. Each model has been trained using 200 epochs each of them running 200 training and validation episodes, then tested using only 200 testing episodes. Finally, the configuration for the few-shot sampling is the same for all dataset: 3 classes (way) for train, test and validation, 10 samples (shot) for support train and test/validation and 15 samples (query) for query train and test/validation. At the end, each episode had 75 graphs. These are the otained results
 
-| **A%**          | **AS-MAML** | **M-Evolve** | **G-Mixup** | **FLAG**  | **Base** |
-|-----------------|-------------|--------------|-------------|-----------|----------|
-| **TRIANGLES**   |    73.47    |     80.88    |    72.63    | **82.17** |   79.81  |
-| **COIL-DEL**    |  **86.51**  |     34.60    |    32.17    |   30.01   |   32.66  |
-| **Letter-High** |  **75.27**  |     42.73    |    35.48    |   41.48   |   40.63  |
+| **A%**          | **AS-MAML** | **+M-Evolve** | **+G-Mixup** | **+FLAG** |
+|-----------------|-------------|---------------|--------------|-----------|
+| **TRIANGLES**   |    82.47    |   **85.48**   |    84.91     |   83.73   |
+| **COIL-DEL**    |    86.51    |   **92.12**   |    90.73     |   89.98   |
+| **Letter-High** |    59.86    |   **62.39**   |    61.07     |   60.68   |
